@@ -8,22 +8,24 @@ import org.nutz.lang.Streams;
 
 public abstract class NutResource implements Comparable<NutResource> {
 
-    public int compareTo(NutResource o) {
-        if (o == null)
-            return -1;
-        if (this == o || (this.name == null && o.name == null))
-            return 0;
-        if (this.name != null && o.name != null)
-            return name.compareTo(o.getName());
-        return this.name == null ? 1 : -1;
-    }
+    protected String name;
 
-    @Override
+    /**
+     * 这个对象的来源
+     */
+    protected String source;
+    
+    protected int priority = 100;
+    
+    public NutResource() {}
+
     public boolean equals(Object obj) {
+    	if (obj == null)
+    		return false;
         if (this == obj)
             return true;
         if (obj instanceof NutResource)
-            return 0 == compareTo((NutResource) obj);
+            return this.toString().equals(obj.toString());
         return false;
     }
 
@@ -39,7 +41,6 @@ public abstract class NutResource implements Comparable<NutResource> {
         return Streams.utf8r(getInputStream());
     }
 
-    @Override
     public int hashCode() {
         return null == name ? "NULL".hashCode() : name.hashCode();
     }
@@ -49,11 +50,30 @@ public abstract class NutResource implements Comparable<NutResource> {
         return this;
     }
 
-    @Override
     public String toString() {
         return String.format("NutResource[%s]", name);
     }
-
-    protected String name;
-
+    
+    public void setSource(String source) {
+        this.source = source;
+    }
+    
+    public String getSource() {
+        return source;
+    }
+    
+    public int compareTo(NutResource o) {
+        if (o.priority == this.priority)
+            return 0;
+        return o.priority > this.priority ? -1 : 1;
+    }
+    
+    public int getPriority() {
+        return priority;
+    }
+    
+    public NutResource setPriority(int priority) {
+        this.priority = priority;
+        return this;
+    }
 }

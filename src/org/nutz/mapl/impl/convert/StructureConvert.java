@@ -1,7 +1,7 @@
 package org.nutz.mapl.impl.convert;
 
 import java.io.Reader;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -62,7 +62,7 @@ import org.nutz.mapl.impl.MaplRebuild;
  */
 public class StructureConvert extends MaplEach implements MaplConvert{
     //关系
-    private Map<String, List<String>> relation = new HashMap<String, List<String>>();
+    private Map<String, List<String>> relation = new LinkedHashMap<String, List<String>>();
     
     private MaplRebuild structure = new MaplRebuild();
     
@@ -94,21 +94,24 @@ public class StructureConvert extends MaplEach implements MaplConvert{
      * 转换
      * @param obj 目标对象
      */
+    @Override
     public Object convert(Object obj){
         each(obj);
         return structure.fetchNewobj();
     }
     
+    @Override
     protected void LRD(String path, Object item) {}
 
     /**
      * 重建新对象
      */
+    @Override
     protected void DLR(String path, Object object) {
         if(relation.containsKey(path)){
             List<String> dests = relation.get(path);
             for(String dest : dests){
-                if(dest.equals("")){
+                if("".equals(dest)){
                     structure.put(path, object, arrayIndex);
                     continue;
                 } 
@@ -163,7 +166,7 @@ public class StructureConvert extends MaplEach implements MaplConvert{
         }
     }
     
-    private String space(String path){
+    private static String space(String path){
         return "".equals(path) ? "" : ".";
     }
     

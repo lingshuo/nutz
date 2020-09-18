@@ -1,24 +1,32 @@
 package org.nutz.mvc;
 
 import java.lang.reflect.Method;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import javax.servlet.ServletContext;
+import javax.servlet.ServletRequest;
+import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import org.nutz.ioc.Ioc;
+import org.nutz.json.Json;
+import org.nutz.json.JsonFormat;
 import org.nutz.lang.util.SimpleContext;
 
 /**
  * Action执行的上下文
+ * 
  * @author wendal(wendal1985@gmail.com)
  * @author zozoh(zozohtnt@gmail.com)
- *
+ * 
  */
 public class ActionContext extends SimpleContext {
 
     private static final String PATH = "nutz.mvc.path";
+    private static final String SUFFIX = "nutz.mvc.path.suffix";
     private static final String PATH_ARGS = "nutz.mvc.pathArgs";
 
     private static final String REQUEST = HttpServletRequest.class.getName();
@@ -29,11 +37,16 @@ public class ActionContext extends SimpleContext {
     private static final String METHOD = "nutz.mvc.method";
     private static final String METHOD_ARGS = "nutz.mvc.method.args";
     private static final String METHOD_RETURN = "nutz.mvc.method.return";
-    
+
     private static final String ERROR = "nutz.mvc.error";
+
+    public static final String AC_DONE = "nutz.mvc.done";
+    
+    public static final String REFER_OBJECT = "nutz.mvc.refer_object";
 
     /**
      * 获取全局的Ioc对象
+     * 
      * @return 如果定义了IocBy注解,则肯定返回非空对象
      */
     public Ioc getIoc() {
@@ -49,7 +62,9 @@ public class ActionContext extends SimpleContext {
 
     /**
      * 设置异常对象,一般由ActionChain捕捉到异常后调用
-     * @param error 异常对象
+     * 
+     * @param error
+     *            异常对象
      * @return 当前上下文,即被调用者本身
      */
     public ActionContext setError(Throwable error) {
@@ -59,6 +74,7 @@ public class ActionContext extends SimpleContext {
 
     /**
      * 获取当前请求的path,经过去后缀处理
+     * 
      * @return 当前请求的path,经过去后缀处理
      */
     public String getPath() {
@@ -67,7 +83,9 @@ public class ActionContext extends SimpleContext {
 
     /**
      * 设置当前请求的path,经过去后缀处理
-     * @param ph 请求的path,,经过去后缀处理
+     * 
+     * @param ph
+     *            请求的path,,经过去后缀处理
      * @return 当前上下文,即被调用者本身
      */
     public ActionContext setPath(String ph) {
@@ -76,7 +94,20 @@ public class ActionContext extends SimpleContext {
     }
 
     /**
+     * @return 当前请求的后缀
+     */
+    public String getSuffix() {
+        return this.getString(SUFFIX);
+    }
+
+    public ActionContext setSuffix(String suffix) {
+        this.set(SUFFIX, suffix);
+        return this;
+    }
+
+    /**
      * 获取路径参数
+     * 
      * @return 路径参数
      */
     @SuppressWarnings("unchecked")
@@ -85,6 +116,11 @@ public class ActionContext extends SimpleContext {
     }
 
     public ActionContext setPathArgs(List<String> args) {
+        this.set(PATH_ARGS, args);
+        return this;
+    }
+
+    public ActionContext setNamedPathArgs(Map<String, Object> args) {
         this.set(PATH_ARGS, args);
         return this;
     }
@@ -98,7 +134,9 @@ public class ActionContext extends SimpleContext {
 
     /**
      * 设置这个Action对应的Method
-     * @param m 这个Action对应的Method
+     * 
+     * @param m
+     *            这个Action对应的Method
      * @return 当前上下文,即被调用者本身
      */
     public ActionContext setMethod(Method m) {
@@ -108,6 +146,7 @@ public class ActionContext extends SimpleContext {
 
     /**
      * 获取将要执行Method的对象
+     * 
      * @return 执行对象,即模块类的实例
      */
     public Object getModule() {
@@ -121,6 +160,7 @@ public class ActionContext extends SimpleContext {
 
     /**
      * 获取将要执行Method的参数
+     * 
      * @return method的参数
      */
     public Object[] getMethodArgs() {
@@ -146,6 +186,7 @@ public class ActionContext extends SimpleContext {
 
     /**
      * 获取请求的HttpServletRequest
+     * 
      * @return 请求的HttpServletRequest
      */
     public HttpServletRequest getRequest() {
@@ -159,6 +200,7 @@ public class ActionContext extends SimpleContext {
 
     /**
      * 获取请求的HttpServletResponse
+     * 
      * @return 请求的HttpServletResponse
      */
     public HttpServletResponse getResponse() {
@@ -172,6 +214,7 @@ public class ActionContext extends SimpleContext {
 
     /**
      * 获取ServletContext
+     * 
      * @return ServletContext
      */
     public ServletContext getServletContext() {
@@ -183,7 +226,33 @@ public class ActionContext extends SimpleContext {
         return this;
     }
     
+    public ActionContext setReferObject(Object value) {
+        this.set(REFER_OBJECT, value);
+        return this;
+    }
+    
+    public Object getReferObject() {
+        return get(REFER_OBJECT);
+    }
+    
+    protected Map<String, Object> getSafeMap() {
+        Map<String, Object> map = new HashMap<String, Object>();
+        for (Map.Entry<String, Object> en : getInnerMap().entrySet()) {
+            Object value = en.getValue();
+            if (value != null) {
+                if (value instanceof ServletRequest || value instanceof ServletResponse || value instanceof ServletContext || value instanceof Ioc)
+                    continue;
+                map.put(en.getKey(), value);
+            }
+        }
+        return map;
+    }
+    
+    public String toJson(JsonFormat jf) {
+        return Json.toJson(getSafeMap(), jf);
+    }
+
     public String toString() {
-        return getInnerMap().toString();
+        return getSafeMap().toString();
     }
 }

@@ -10,6 +10,7 @@ import java.io.StringReader;
 import java.sql.SQLException;
 
 import org.junit.Test;
+import org.nutz.dao.Cnd;
 import org.nutz.dao.test.DaoCase;
 import org.nutz.dao.test.meta.BinObject;
 import org.nutz.dao.test.meta.TheGoods;
@@ -45,11 +46,12 @@ public class BinaryDaoTest extends DaoCase {
     }
 
     @Test
+    // 如果报错且mysql的话,设置数据库的max_allowed_packet属性哦
     public void test_big_blob() throws IOException {
         String path = "~/tmp/big.blob";
         Files.createFileIfNoExists(path);
         OutputStream fos = Streams.fileOut(path);
-        for (int i = 0; i < 10240; i++) {
+        for (int i = 0; i < 5*1024; i++) { // 更多的数据需要不同的类型
             fos.write(new byte[1024]);
         }
         fos.close();
@@ -63,16 +65,19 @@ public class BinaryDaoTest extends DaoCase {
     
     @Test
     public void test_blob() throws IOException {
-        dao.create(BinObject.class, true);
-        
-        BinObject obj = new BinObject();
-        obj.setXblob(new ByteArrayInputStream("中文".getBytes()));
-        obj.setXclob(new StringReader("不是英文"));
-        dao.insert(obj);
-        
-        BinObject db_obj = dao.fetch(BinObject.class);
-        assertTrue(Streams.equals(new ByteArrayInputStream("中文".getBytes()), db_obj.getXblob()));
-        assertEquals("不是英文", Lang.readAll(db_obj.getXclob()));
+        // For mysql only
+        if (dao.meta().isMySql()) {
+            dao.create(BinObject.class, true);
+
+            BinObject obj = new BinObject();
+            obj.setXblob(new ByteArrayInputStream("中文".getBytes()));
+            obj.setXclob(new StringReader("不是英文"));
+            dao.insert(obj);
+
+            BinObject db_obj = dao.fetch(BinObject.class);
+            assertTrue(Streams.equals(new ByteArrayInputStream("中文".getBytes()), db_obj.getXblob()));
+            assertEquals("不是英文", Lang.readAll(db_obj.getXclob()));
+        }
     }
     
     //for issue 278
@@ -84,8 +89,11 @@ public class BinaryDaoTest extends DaoCase {
         Files.write(f, "中文");
         bin.setMyClob(new SimpleClob(f));
         dao.insert(bin);
-        
+        Lang.quiteSleep(1000);
+        System.out.println(dao.fetch("bin_object", Cnd.NEW()));
         bin = dao.fetch(BinObject.class);
+        assertNotNull(bin);
+        assertNotNull(bin.getMyClob());
         String str = Lang.readAll(bin.getMyClob().getCharacterStream());
         assertEquals("中文", str);
     }

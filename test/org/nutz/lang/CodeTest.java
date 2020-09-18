@@ -2,8 +2,7 @@ package org.nutz.lang;
 
 import java.io.File;
 
-import junit.framework.Assert;
-
+import org.junit.Assert;
 import org.junit.Test;
 import org.nutz.lang.Code.CodeAnalysisResult;
 import org.nutz.lang.Code.CodeStatisticsResult;
@@ -13,12 +12,12 @@ public class CodeTest {
     private static String path;
 
     static {
-        path = CodeTest.class.getResource("").getPath();
+        path = Files.findFile("org/nutz/lang/CodeAnalysisDemo1.ca").getParent();
     }
 
     @Test
     public void analysisFile() throws Exception {
-        File file = new File(path + "CodeAnalysisDemo1.ca");
+        File file = new File(path + "/CodeAnalysisDemo1.ca");
         CodeAnalysisResult analysisResult = Code.countingCode(file, null);
         Assert.assertEquals(4, analysisResult.getImportLines());
         Assert.assertEquals(5, analysisResult.getCommentLines());
@@ -29,7 +28,10 @@ public class CodeTest {
     @Test
     public void analysisFolder() throws Exception {
         File src = new File(path);
-        CodeStatisticsResult statisticsResult = Code.countingCode(src, "ca", false, null);
+        CodeStatisticsResult statisticsResult = Code.countingCode(src,
+                                                                  "ca",
+                                                                  false,
+                                                                  null);
         Assert.assertEquals(2, statisticsResult.getFileCount());
         Assert.assertEquals(8, statisticsResult.getImportLines());
         Assert.assertEquals(10, statisticsResult.getCommentLines());
@@ -40,7 +42,10 @@ public class CodeTest {
     @Test
     public void analysisFolderAndSubFolder() throws Exception {
         File src = new File(path);
-        CodeStatisticsResult statisticsResult = Code.countingCode(src, "ca", true, null);
+        CodeStatisticsResult statisticsResult = Code.countingCode(src,
+                                                                  "ca",
+                                                                  true,
+                                                                  null);
         Assert.assertEquals(4, statisticsResult.getFileCount());
         Assert.assertEquals(16, statisticsResult.getImportLines());
         Assert.assertEquals(20, statisticsResult.getCommentLines());

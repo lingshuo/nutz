@@ -1,14 +1,13 @@
 package org.nutz.trans;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 
 import java.sql.Connection;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import junit.framework.Assert;
-
+import org.junit.Assert;
 import org.junit.Test;
 import org.nutz.Nutzs;
 import org.nutz.dao.ConnCallback;
@@ -157,7 +156,7 @@ public class TransLevelTest extends DaoCase {
     @Test
     public void testReadCommitted() {
         // SqlServer/hsql 在这个测试中，两个线程会相互等待 ...
-        if (dao.meta().isSqlServer() || dao.meta().isHsql()) {
+        if (dao.meta().isSqlServer() || dao.meta().isHsql() || dao.meta().isDerby()) {
             Nutzs.notSupport(dao.meta());
         }
         // H2 会在抛异常：Timeout trying to lock table "TRANS_COMPANY";

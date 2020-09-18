@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.nutz.dao.DaoException;
 import org.nutz.dao.FieldMatcher;
 import org.nutz.dao.entity.Entity;
 import org.nutz.dao.entity.EntityIndex;
@@ -14,6 +15,7 @@ import org.nutz.dao.entity.LinkVisitor;
 import org.nutz.dao.entity.MappingField;
 import org.nutz.dao.entity.PkType;
 import org.nutz.dao.entity.Record;
+import org.nutz.dao.interceptor.PojoInterceptor;
 import org.nutz.dao.sql.Pojo;
 import org.nutz.lang.Lang;
 import org.nutz.lang.Mirror;
@@ -28,6 +30,8 @@ import org.nutz.lang.util.Context;
  * @author zozoh(zozohtnt@gmail.com)
  */
 public class NutEntity<T> implements Entity<T> {
+
+    private static final Object[] EMTRY_ARG = new Object[]{};
 
     /**
      * 按照 Java 字段名索引映射字段
@@ -95,6 +99,11 @@ public class NutEntity<T> implements Entity<T> {
     private MappingField theName;
 
     /**
+     * version字段映射
+     */
+    private MappingField theVersion;
+
+    /**
      * 实体 Java 类型
      */
     protected Class<T> type;
@@ -154,7 +163,11 @@ public class NutEntity<T> implements Entity<T> {
      */
     private PkType pkType;
 
-    public NutEntity(Class<T> type) {
+    private boolean complete;
+
+    private PojoInterceptor interceptor;
+
+    public NutEntity(final Class<T> type) {
         this.type = type;
         this.mirror = Mirror.me(type);
         this.byJava = new HashMap<String, MappingField>();
@@ -182,6 +195,8 @@ public class NutEntity<T> implements Entity<T> {
         BornContext<T> bc = Borns.evalByArgTypes(type, ResultSet.class);
         if (null != bc)
             this.bornByRS = bc.getBorning();
+        else if (null == bornByDefault)
+            throw new DaoException("Need non-arg constructor : " + type);
 
         // 映射
         this.ones = new LinkFieldSet();
@@ -190,28 +205,36 @@ public class NutEntity<T> implements Entity<T> {
     }
 
     public T getObject(ResultSet rs, FieldMatcher matcher) {
+        return getObject(rs, matcher, null);
+    }
+
+    public T getObject(ResultSet rs, FieldMatcher matcher, String prefix) {
         // 构造时创建对象
         if (null != bornByRS)
-            return bornByRS.born(Lang.array(rs));
+            return bornByRS.born(rs);
 
         // 通过反射每个字段逐次设置对象
-        T re = bornByDefault.born(new Object[]{});
+        T re = bornByDefault.born(EMTRY_ARG);
         if (null == matcher)
             for (MappingField fld : fields)
-                fld.injectValue(re, rs);
+                fld.injectValue(re, rs, prefix);
         else
             for (MappingField fld : fields)
                 if (matcher.match(fld.getName()))
-                    fld.injectValue(re, rs);
+                    fld.injectValue(re, rs, prefix);
 
         // 返回构造的对象
         return re;
     }
 
     public T getObject(Record rec) {
-        T obj = bornByDefault.born(new Object[]{});
+        return getObject(rec, null);
+    }
+
+    public T getObject(Record rec, String prefix) {
+        T obj = bornByDefault.born(EMTRY_ARG);
         for (MappingField fld : fields)
-            fld.injectValue(obj, rec);
+            fld.injectValue(obj, rec, prefix);
         return obj;
 
     }
@@ -228,9 +251,9 @@ public class NutEntity<T> implements Entity<T> {
                 if (byJava.containsKey(name) && byJava.get(name).isCompositePk())
                     theComposites.add(byJava.get(name));
                 else
-                    throw Lang.makeThrow(    "Fail to find comosite field '%s' in class '%s'!",
-                                            name,
-                                            type.getName());
+                    throw Lang.makeThrow("Fail to find comosite field '%s' in class '%s'!",
+                                         name,
+                                         type.getName());
             }
             this.pkType = PkType.COMPOSITE;
         } else if (null != this.theId) {
@@ -251,6 +274,11 @@ public class NutEntity<T> implements Entity<T> {
             theId = field;
         else if (field.isName())
             theName = field;
+        // wjw(2017-04-10),add,乐观锁
+        else if (field.isVersion())
+            theVersion = field;
+
+        field.setEntity(this);
         byJava.put(field.getName(), field);
         byDB.put(field.getColumnName(), field);
         fields.add(field);
@@ -273,9 +301,9 @@ public class NutEntity<T> implements Entity<T> {
             manymanys.add(lnk);
             break;
         default:
-            throw Lang.makeThrow(    "It is a miracle in Link field: '%s'(%s)",
-                                    lnk.getName(),
-                                    lnk.getEntity().getType().getName());
+            throw Lang.makeThrow("It is a miracle in Link field: '%s'(%s)",
+                                 lnk.getName(),
+                                 lnk.getEntity().getType().getName());
         }
     }
 
@@ -287,7 +315,7 @@ public class NutEntity<T> implements Entity<T> {
      */
     public void addIndex(EntityIndex index) {
         indexes.add(index);
-        indexMap.put(index.getName(), index);
+        indexMap.put(index.getName(this), index);
     }
 
     public Context wrapAsContext(Object obj) {
@@ -351,8 +379,8 @@ public class NutEntity<T> implements Entity<T> {
         List<LinkField> reManys = manys.getList(regex);
         List<LinkField> reManymanys = manymanys.getList(regex);
         List<LinkField> re = new ArrayList<LinkField>(reOnes.size()
-                                                        + reManys.size()
-                                                        + reManymanys.size());
+                                                      + reManys.size()
+                                                      + reManymanys.size());
         re.addAll(reOnes);
         re.addAll(reManys);
         re.addAll(reManymanys);
@@ -365,6 +393,10 @@ public class NutEntity<T> implements Entity<T> {
 
     public MappingField getNameField() {
         return this.theName;
+    }
+
+    public MappingField getVersionField() {
+        return this.theVersion;
     }
 
     public MappingField getIdField() {
@@ -467,5 +499,31 @@ public class NutEntity<T> implements Entity<T> {
 
     public String getColumnComent(String columnName) {
         return columnComments.get(columnName);
+    }
+
+    public boolean isComplete() {
+        return complete;
+    }
+
+    public void setComplete(boolean complete) {
+        this.complete = complete;
+    }
+
+    public T born(ResultSet rs) {
+        if (null != bornByRS)
+            return bornByRS.born(rs);
+        return bornByDefault.born(EMTRY_ARG);
+    }
+
+    public PojoInterceptor getInterceptor() {
+        return this.interceptor;
+    }
+
+    public void setInterceptor(PojoInterceptor interceptor) {
+        this.interceptor = interceptor;
+    }
+
+    public boolean hasInsertMacroes() {
+        return beforeInsertMacroes.size() > 0 || afterInsertMacroes.size() > 0;
     }
 }

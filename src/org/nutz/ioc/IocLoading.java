@@ -1,11 +1,13 @@
 package org.nutz.ioc;
 
+import static org.nutz.ioc.Iocs.isIocObject;
+
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.Set;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import org.nutz.castor.Castors;
 import org.nutz.castor.FailToCastObjectException;
@@ -13,19 +15,12 @@ import org.nutz.ioc.meta.IocEventSet;
 import org.nutz.ioc.meta.IocField;
 import org.nutz.ioc.meta.IocObject;
 import org.nutz.ioc.meta.IocValue;
-import org.nutz.json.Json;
 import org.nutz.lang.Each;
 import org.nutz.lang.Lang;
 import org.nutz.lang.Mirror;
 import org.nutz.lang.Strings;
-import org.nutz.log.Log;
-import org.nutz.log.Logs;
-
-import static org.nutz.ioc.Iocs.*;
 
 public class IocLoading {
-
-    private static final Log log = Logs.get();
 
     private Set<String> supportedTypes;
 
@@ -47,10 +42,6 @@ public class IocLoading {
                 ifld.setValue(object2value(en.getValue()));
                 iobj.addField(ifld);
             }
-            if (log.isWarnEnabled()) // TODO 移除这种兼容性
-                log.warn("Using *Declared* ioc-define (without type or events)!!! Pls use Standard Ioc-Define!!"
-                            + " Bean will define as:\n"
-                            + Json.toJson(iobj));
         } else {
             Object v = map.get("type");
             // type
@@ -117,6 +108,11 @@ public class IocLoading {
             catch (Exception e) {
                 throw E(e, "Wrong args: '%s'", v);
             }
+            // factory方法
+            v = map.get("factory");
+            if (v != null && !Strings.isBlank(v.toString())) {
+            	iobj.setFactory(v.toString());
+			}
         }
         return iobj;
     }
@@ -147,7 +143,7 @@ public class IocLoading {
                 }
             }
             // Inner
-            if (isIocObject(map)) {
+            if (map.size() > 0 && isIocObject(map)) {
                 iv.setType(IocValue.TYPE_INNER);
                 try {
                     iv.setValue(map2iobj(map));

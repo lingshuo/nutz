@@ -2,10 +2,13 @@ package org.nutz.dao.impl.sql.pojo;
 
 import org.nutz.dao.Chain;
 import org.nutz.dao.entity.Entity;
+import org.nutz.dao.entity.MappingField;
 import org.nutz.dao.jdbc.ValueAdaptor;
 import org.nutz.lang.Lang;
 
 public class InsertByChainPItem extends AbstractPItem {
+
+    private static final long serialVersionUID = 1L;
 
     private String[] names;
     private Object[] values;
@@ -43,7 +46,7 @@ public class InsertByChainPItem extends AbstractPItem {
 
     public int joinAdaptor(Entity<?> en, ValueAdaptor[] adaptors, int off) {
         for (int i = 0; i < names.length; i++)
-            adaptors[off++] = en.getColumn(_colname(en, i)).getAdaptor();
+            adaptors[off++] = _adaptor(en, i);
         return off;
     }
 
@@ -58,6 +61,16 @@ public class InsertByChainPItem extends AbstractPItem {
     }
 
     private String _colname(Entity<?> en, int index) {
-        return en.getField(names[index]).getColumnName();
+    	MappingField field = en.getField(names[index]);
+    	if (field == null)
+    		throw new IllegalArgumentException(String.format("Class %s didn't have field named (%s)", en.getType(), names[index]));
+        return field.getColumnNameInSql();
+    }
+    
+    private ValueAdaptor _adaptor(Entity<?> en, int index) {
+        MappingField field = en.getField(names[index]);
+        if (field == null)
+            throw new IllegalArgumentException(String.format("Class %s didn't have field named (%s)", en.getType(), names[index]));
+        return field.getAdaptor();
     }
 }

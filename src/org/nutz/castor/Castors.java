@@ -1,23 +1,23 @@
 package org.nutz.castor;
 
+import java.lang.reflect.Array;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.concurrent.ConcurrentHashMap;
 
-import org.nutz.castor.castor.Array2Array;
 import org.nutz.castor.castor.Object2Object;
+import org.nutz.conf.NutConf;
 import org.nutz.lang.Lang;
 import org.nutz.lang.Mirror;
 import org.nutz.lang.TypeExtractor;
 import org.nutz.log.Log;
 import org.nutz.log.Logs;
-import org.nutz.resource.Scans;
 
 /**
  * 一个创建 Castor 的工厂类。它的使用方式是：
@@ -52,14 +52,12 @@ public class Castors {
      * 如何抽取对象的类型级别
      */
     private TypeExtractor extractor;
-    /**
-     * Castor 的搜索路径
-     */
-    private List<Class<?>> paths;
+
     /**
      * Castor 的配置
      */
     private Object setting;
+    private HashMap<Class<?>, Method> settingMap;
 
     /**
      * 设置转换的配置
@@ -81,49 +79,6 @@ public class Castors {
     }
 
     /**
-     * 你的的 Castor 可能存在在不同包下，你可以把每个包下的随便一个 Castor 作为例子放到一个列表里。 这样， Nutz.Castor
-     * 就能找到同一包下其他的 Castor 了。
-     * <p>
-     * 你的 Castor 存放在 CLASSPAH 下或者 Jar 包里都是没有问题的
-     * 
-     * @param paths
-     *            Castor 例子列表
-     */
-    public synchronized Castors setPaths(List<Class<?>> paths) {
-        if (paths != null) {
-            this.paths = paths;
-            reload();
-        }
-        return this;
-    }
-
-    /**
-     * 将 Castor 的寻找路径恢复成默认值。
-     */
-    public synchronized Castors resetPaths() {
-        paths = new ArrayList<Class<?>>();
-        paths.add(Array2Array.class);
-        reload();
-        return this;
-    }
-
-    /**
-     * 增加 Castor 的寻找路径。
-     * 
-     * @param paths
-     *            示例 Castor
-     */
-    public synchronized Castors addPaths(Class<?>... paths) {
-        if (null != paths) {
-            for (Class<?> path : paths)
-                if (path != null)
-                    this.paths.add(path);
-            reload();
-        }
-        return this;
-    }
-
-    /**
      * 设置自定义的对象类型提取器逻辑
      * 
      * @param te
@@ -136,50 +91,21 @@ public class Castors {
 
     private Castors() {
         setting = new DefaultCastorSetting();
-        resetPaths();
+        reload();
     }
 
     private void reload() {
-        if (paths == null || paths.size() == 0) {
-            resetPaths();
-            return;
-        }
-        HashMap<Class<?>, Method> settingMap = new HashMap<Class<?>, Method>();
-        for (Method m1 : setting.getClass().getMethods()) {
-            Class<?>[] pts = m1.getParameterTypes();
-            if (pts.length == 1 && Castor.class.isAssignableFrom(pts[0]))
-                settingMap.put(pts[0], m1);
-        }
-        // build castors
-//        this.map = new HashMap<String, Map<String, Castor<?, ?>>>();
-
-        this.map = new HashMap<Integer, Castor<?,?>>();
+        buildSettingMap();
+        // this.map =
         ArrayList<Class<?>> classes = new ArrayList<Class<?>>();
-        if (Lang.isAndroid) {
-            classes.addAll(defaultCastorList);
-        } else {
-            for (Iterator<Class<?>> it = paths.iterator(); it.hasNext();) {
-                Class<?> baseClass = it.next();
-                if (baseClass == null)
-                    continue;
-                List<Class<?>> list = Scans.me().scanPackage(baseClass);
-                if (null != list && list.size() > 0)
-                    classes.addAll(list);
-            }
-            // 一个类都找不到,好吧,加载默认的,从文件读取列表
-            if (classes.size() == 0) {
-                if (log.isWarnEnabled())
-                    log.warn("!!No castor found!!!!!!!!! Load default castor list");
-                classes.addAll(defaultCastorList);
-            }
-        }
+        classes.addAll(defaultCastorList);
         for (Class<?> klass : classes) {
             try {
                 if (Modifier.isAbstract(klass.getModifiers()))
                     continue;
                 if (!Castor.class.isAssignableFrom(klass))
                     continue;
-                fillMap(klass, settingMap);
+                fillMap(klass, settingMap, false);
             }
             catch (Throwable e) {
                 if (log.isWarnEnabled())
@@ -189,21 +115,47 @@ public class Castors {
         if (log.isDebugEnabled())
             log.debugf("Using %s castor for Castors", map.size());
     }
-    
+
+    private void buildSettingMap() throws SecurityException {
+        settingMap = new HashMap<Class<?>, Method>();
+        for (Method m1 : setting.getClass().getMethods()) {
+            Class<?>[] pts = m1.getParameterTypes();
+            if (pts.length == 1 && Castor.class.isAssignableFrom(pts[0])) {
+                settingMap.put(pts[0], m1);
+            }
+        }
+    }
+
+    public void addCastor(Class<?> klass) {
+        try {
+            fillMap(klass, settingMap, true);
+        }
+        catch (Throwable e) {
+            throw Lang.wrapThrow(Lang.unwrapThrow(e));
+        }
+    }
+
     /**
      * 填充 map .<br>
      * 在map中使用hash值来做为key来进行存储
+     * 
      * @param klass
      * @param settingMap
+     * @param replace
      * @throws InstantiationException
      * @throws IllegalAccessException
      * @throws IllegalArgumentException
      * @throws InvocationTargetException
      */
-    private void fillMap(Class<?> klass, HashMap<Class<?>, Method> settingMap) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException{
+    private void fillMap(Class<?> klass, HashMap<Class<?>, Method> settingMap, boolean replace)
+            throws InstantiationException, IllegalAccessException, IllegalArgumentException,
+            InvocationTargetException {
         Castor<?, ?> castor = (Castor<?, ?>) klass.newInstance();
-        if(!map.containsKey(castor.hashCode())){
-            map.put(castor.hashCode(), castor);
+        String key = castor.toString();
+        if (!map.containsKey(key) || replace) {
+            map.put(key, castor);
+        } else {
+            castor = map.get(key);
         }
         Method m = settingMap.get(castor.getClass());
         if (null == m) {
@@ -222,8 +174,9 @@ public class Castors {
     /**
      * First index is "from" (source) The second index is "to" (target)
      */
-//    private Map<String, Map<String, Castor<?, ?>>> map;
-    private Map<Integer, Castor<?,?>> map;
+    // private Map<String, Map<String, Castor<?, ?>>> map;
+    // private Map<Integer, Castor<?,?>> map;
+    private Map<String, Castor<?, ?>> map = new ConcurrentHashMap<String, Castor<?, ?>>();
 
     /**
      * 转换一个 POJO 从一个指定的类型到另外的类型
@@ -267,22 +220,35 @@ public class Castors {
             // 是对象，直接返回 null
             return null;
         }
+
         if (fromType == toType || toType == null || fromType == null)
             return (T) src;
+
+        Class<?> componentType = toType.getComponentType();
+        if (null != componentType
+            && fromType != String.class
+            && componentType.isAssignableFrom(fromType)) {
+            Object array = Array.newInstance(componentType, 1);
+            Array.set(array, 0, src);
+            return (T) array;
+        }
+
         if (fromType.getName().equals(toType.getName()))
             return (T) src;
         if (toType.isAssignableFrom(fromType))
             return (T) src;
         Mirror<?> from = Mirror.me(fromType, extractor);
-        if (from.canCastToDirectly(toType)) // Use language built-in cases
-            return (T) src;
         Castor c = find(from, toType);
         if (null == c)
-            throw new FailToCastObjectException(String.format(    "Can not find castor for '%s'=>'%s' in (%d) because:\n%s",
-                                                                fromType.getName(),
-                                                                toType.getName(),
-                                                                map.size(),
-                                                                "Fail to find matched castor"));
+            throw new FailToCastObjectException(String.format("Can not find castor for '%s'=>'%s' in (%d) because:\n%s",
+                                                              fromType.getName(),
+                                                              toType.getName(),
+                                                              map.size(),
+                                                              "Fail to find matched castor"));
+        if (Object2Object.class.getName().equals(c.getClass().getName())
+            && from.canCastToDirectly(toType)) { // Use language built-in cases
+            return (T) src;
+        }
         try {
             return (T) c.cast(src, toType, args);
         }
@@ -290,13 +256,11 @@ public class Castors {
             throw e;
         }
         catch (Exception e) {
-            throw new FailToCastObjectException(String.format(    "Fail to cast from <%s> to <%s> for {%s} because:\n%s:%s",
-                                                                fromType.getName(),
-                                                                toType.getName(),
-                                                                src,
-                                                                e.getClass().getSimpleName(),
-                                                                e.getMessage()),
-                                                e);
+            throw new FailToCastObjectException(String.format("Fail to cast from <%s> to <%s> for {%s}",
+                                                              fromType.getName(),
+                                                              toType.getName(),
+                                                              src),
+                                                Lang.unwrapThrow(e));
         }
     }
 
@@ -315,13 +279,23 @@ public class Castors {
 
     @SuppressWarnings("unchecked")
     private <F, T> Castor<F, T> find(Mirror<F> from, Class<T> toType) {
+        String key = Castor.key(from.getType(), toType);
+        // 哈，这种类型以前转过，直接返回转换器就行了
+        if (map.containsKey(key)) {
+            return (Castor<F, T>) map.get(key);
+        }
+
         Mirror<T> to = Mirror.me(toType, extractor);
         Class<?>[] fets = from.extractTypes();
         Class<?>[] tets = to.extractTypes();
-        for(Class<?> ft : fets){
-            for(Class<?> tt : tets){
-                if(map.containsKey(Castor.fetchHash(ft, tt))){
-                    return (Castor<F, T>) map.get(Castor.fetchHash(ft, tt));
+        for (Class<?> ft : fets) {
+            for (Class<?> tt : tets) {
+                if (map.containsKey(Castor.key(ft, tt))) {
+                    String key2 = Castor.key(ft, tt);
+                    Castor<F, T> castor = (Castor<F, T>) map.get(key2);
+                    // 缓存转换器，加速下回转换速度
+                    map.put(key, castor);
+                    return castor;
                 }
             }
         }
@@ -357,6 +331,11 @@ public class Castors {
     public boolean canCast(Class<?> fromType, Class<?> toType) {
         if (Mirror.me(fromType).canCastToDirectly(toType))
             return true;
+
+        if (toType.isArray() && toType.getComponentType().isAssignableFrom(fromType)) {
+            return true;
+        }
+
         Castor<?, ?> castor = this.find(fromType, toType);
         return !(castor instanceof Object2Object);
     }
@@ -376,91 +355,124 @@ public class Castors {
             return String.valueOf(src);
         }
     }
-    
-    private static List<Class<?>> defaultCastorList = new ArrayList<Class<?>>(100);
+
+    private static List<Class<?>> defaultCastorList = new ArrayList<Class<?>>(120);
+
     static {
-        defaultCastorList.add(org.nutz.castor.castor.String2Character.class);
+
+        defaultCastorList.add(org.nutz.castor.castor.Array2Array.class);
+        defaultCastorList.add(org.nutz.castor.castor.Array2Collection.class);
+        defaultCastorList.add(org.nutz.castor.castor.Array2Map.class);
+        defaultCastorList.add(org.nutz.castor.castor.Array2Object.class);
+        defaultCastorList.add(org.nutz.castor.castor.Array2String.class);
+        defaultCastorList.add(org.nutz.castor.castor.Boolean2Boolean.class);
+        defaultCastorList.add(org.nutz.castor.castor.Boolean2Number.class);
+        defaultCastorList.add(org.nutz.castor.castor.Boolean2String.class);
+        defaultCastorList.add(org.nutz.castor.castor.Calendar2Datetime.class);
+        defaultCastorList.add(org.nutz.castor.castor.Calendar2Long.class);
         defaultCastorList.add(org.nutz.castor.castor.Calendar2String.class);
         defaultCastorList.add(org.nutz.castor.castor.Calendar2Timestamp.class);
-        defaultCastorList.add(org.nutz.castor.castor.Collection2Collection.class);
-        defaultCastorList.add(org.nutz.castor.castor.Collection2Object.class);
-        defaultCastorList.add(org.nutz.castor.castor.File2String.class);
-        defaultCastorList.add(org.nutz.castor.castor.String2Timestamp.class);
-        defaultCastorList.add(org.nutz.castor.castor.Map2Object.class);
-        defaultCastorList.add(org.nutz.castor.castor.Datetime2String.class);
-        defaultCastorList.add(org.nutz.castor.castor.Array2String.class);
-        defaultCastorList.add(org.nutz.castor.castor.String2SqlTime.class);
-        defaultCastorList.add(org.nutz.castor.castor.Number2Calendar.class);
-        defaultCastorList.add(org.nutz.castor.castor.SqlDate2Timestamp.class);
-        defaultCastorList.add(org.nutz.castor.castor.Object2Mirror.class);
-        defaultCastorList.add(org.nutz.castor.castor.String2Collection.class);
-        defaultCastorList.add(org.nutz.castor.castor.Datetime2Calendar.class);
-        defaultCastorList.add(org.nutz.castor.castor.Class2String.class);
-        defaultCastorList.add(org.nutz.castor.castor.Number2String.class);
-        defaultCastorList.add(org.nutz.castor.castor.Number2Enum.class);
-        defaultCastorList.add(org.nutz.castor.castor.Array2Object.class);
-        defaultCastorList.add(org.nutz.castor.castor.Timestamp2Calendar.class);
-        defaultCastorList.add(org.nutz.castor.castor.Timestamp2String.class);
-        defaultCastorList.add(org.nutz.castor.castor.Datetime2SqlTime.class);
-        defaultCastorList.add(org.nutz.castor.castor.TimeZone2String.class);
-        defaultCastorList.add(org.nutz.castor.castor.String2Boolean.class);
-        defaultCastorList.add(org.nutz.castor.castor.Datetime2SqlDate.class);
-        defaultCastorList.add(org.nutz.castor.castor.Object2List.class);
-        defaultCastorList.add(org.nutz.castor.castor.SqlDate2String.class);
-        defaultCastorList.add(org.nutz.castor.castor.Timestamp2SqlDate.class);
-        defaultCastorList.add(org.nutz.castor.castor.Map2String.class);
-        defaultCastorList.add(org.nutz.castor.castor.DateTimeCastor.class);
-        defaultCastorList.add(org.nutz.castor.castor.Boolean2String.class);
-        defaultCastorList.add(org.nutz.castor.castor.String2Class.class);
-        defaultCastorList.add(org.nutz.castor.castor.String2Pattern.class);
-        defaultCastorList.add(org.nutz.castor.castor.String2Map.class);
-        defaultCastorList.add(org.nutz.castor.castor.Mirror2Class.class);
-        defaultCastorList.add(org.nutz.castor.castor.SqlTime2String.class);
-        defaultCastorList.add(org.nutz.castor.castor.Object2Object.class);
-        defaultCastorList.add(org.nutz.castor.castor.String2TimeZone.class);
         defaultCastorList.add(org.nutz.castor.castor.Character2Number.class);
-        defaultCastorList.add(org.nutz.castor.castor.String2Number.class);
-        defaultCastorList.add(org.nutz.castor.castor.Number2Boolean.class);
-        defaultCastorList.add(org.nutz.castor.castor.Timestamp2SqlTime.class);
-        defaultCastorList.add(org.nutz.castor.castor.Timestamp2Long.class);
-        defaultCastorList.add(org.nutz.castor.castor.String2Calendar.class);
-        defaultCastorList.add(org.nutz.castor.castor.String2Email.class);
-        defaultCastorList.add(org.nutz.castor.castor.Calendar2Datetime.class);
-        defaultCastorList.add(org.nutz.castor.castor.Enum2String.class);
-        defaultCastorList.add(org.nutz.castor.castor.Collection2Map.class);
-        defaultCastorList.add(org.nutz.castor.castor.Array2Array.class);
-        defaultCastorList.add(org.nutz.castor.castor.Number2Datetime.class);
-        defaultCastorList.add(org.nutz.castor.castor.Map2Array.class);
-        defaultCastorList.add(org.nutz.castor.castor.Array2Collection.class);
-        defaultCastorList.add(org.nutz.castor.castor.String2Set.class);
-        defaultCastorList.add(org.nutz.castor.castor.String2Mirror.class);
-        defaultCastorList.add(org.nutz.castor.castor.Mirror2String.class);
-        defaultCastorList.add(org.nutz.castor.castor.SqlTime2Timestamp.class);
-        defaultCastorList.add(org.nutz.castor.castor.Object2Class.class);
-        defaultCastorList.add(org.nutz.castor.castor.Object2Map.class);
-        defaultCastorList.add(org.nutz.castor.castor.String2File.class);
-        defaultCastorList.add(org.nutz.castor.castor.Boolean2Number.class);
-        defaultCastorList.add(org.nutz.castor.castor.Map2Collection.class);
-        defaultCastorList.add(org.nutz.castor.castor.String2SqlDate.class);
-        defaultCastorList.add(org.nutz.castor.castor.String2Array.class);
-        defaultCastorList.add(org.nutz.castor.castor.String2Object.class);
-        defaultCastorList.add(org.nutz.castor.castor.Number2Number.class);
         defaultCastorList.add(org.nutz.castor.castor.Class2Mirror.class);
-        defaultCastorList.add(org.nutz.castor.castor.String2Datetime.class);
-        defaultCastorList.add(org.nutz.castor.castor.Calendar2Long.class);
-        defaultCastorList.add(org.nutz.castor.castor.Number2Character.class);
-        defaultCastorList.add(org.nutz.castor.castor.Collection2String.class);
-        defaultCastorList.add(org.nutz.castor.castor.Datetime2Long.class);
-        defaultCastorList.add(org.nutz.castor.castor.Array2Map.class);
-        defaultCastorList.add(org.nutz.castor.castor.Number2Timestamp.class);
+        defaultCastorList.add(org.nutz.castor.castor.Class2String.class);
         defaultCastorList.add(org.nutz.castor.castor.Collection2Array.class);
-        defaultCastorList.add(org.nutz.castor.castor.Enum2Number.class);
-        defaultCastorList.add(org.nutz.castor.castor.Object2String.class);
-        defaultCastorList.add(org.nutz.castor.castor.Timestamp2Datetime.class);
+        defaultCastorList.add(org.nutz.castor.castor.Collection2Collection.class);
+        defaultCastorList.add(org.nutz.castor.castor.Collection2Map.class);
+        defaultCastorList.add(org.nutz.castor.castor.Collection2Object.class);
+        defaultCastorList.add(org.nutz.castor.castor.Collection2String.class);
+        defaultCastorList.add(org.nutz.castor.castor.Datetime2Calendar.class);
+        defaultCastorList.add(org.nutz.castor.castor.Datetime2Long.class);
+        defaultCastorList.add(org.nutz.castor.castor.Datetime2SqlDate.class);
+        defaultCastorList.add(org.nutz.castor.castor.Datetime2SqlTime.class);
+        defaultCastorList.add(org.nutz.castor.castor.Datetime2String.class);
         defaultCastorList.add(org.nutz.castor.castor.Datetime2Timpestamp.class);
+        defaultCastorList.add(org.nutz.castor.castor.Enum2Number.class);
+        defaultCastorList.add(org.nutz.castor.castor.Enum2String.class);
+        defaultCastorList.add(org.nutz.castor.castor.File2String.class);
+        defaultCastorList.add(org.nutz.castor.castor.Map2Array.class);
+        defaultCastorList.add(org.nutz.castor.castor.Map2Boolean.class);
+        defaultCastorList.add(org.nutz.castor.castor.Map2Collection.class);
         defaultCastorList.add(org.nutz.castor.castor.Map2Enum.class);
+        defaultCastorList.add(org.nutz.castor.castor.Map2Object.class);
+        defaultCastorList.add(org.nutz.castor.castor.Map2String.class);
+        defaultCastorList.add(org.nutz.castor.castor.Mirror2Class.class);
+        defaultCastorList.add(org.nutz.castor.castor.Mirror2String.class);
+        defaultCastorList.add(org.nutz.castor.castor.Number2Boolean.class);
+        defaultCastorList.add(org.nutz.castor.castor.Number2Byte.class);
+        defaultCastorList.add(org.nutz.castor.castor.Number2Calendar.class);
+        defaultCastorList.add(org.nutz.castor.castor.Number2Char.class);
+        defaultCastorList.add(org.nutz.castor.castor.Number2Character.class);
+        defaultCastorList.add(org.nutz.castor.castor.Number2Datetime.class);
+        defaultCastorList.add(org.nutz.castor.castor.Number2Double.class);
+        defaultCastorList.add(org.nutz.castor.castor.Number2Enum.class);
+        defaultCastorList.add(org.nutz.castor.castor.Number2Float.class);
+        defaultCastorList.add(org.nutz.castor.castor.Number2Integer.class);
+        defaultCastorList.add(org.nutz.castor.castor.Number2Long.class);
+        defaultCastorList.add(org.nutz.castor.castor.Number2Short.class);
+        defaultCastorList.add(org.nutz.castor.castor.Number2String.class);
+        defaultCastorList.add(org.nutz.castor.castor.Number2Timestamp.class);
+        defaultCastorList.add(org.nutz.castor.castor.Object2Boolean.class);
+        defaultCastorList.add(org.nutz.castor.castor.Object2Class.class);
+        defaultCastorList.add(org.nutz.castor.castor.Object2List.class);
+        defaultCastorList.add(org.nutz.castor.castor.Object2Map.class);
+        defaultCastorList.add(org.nutz.castor.castor.Object2Mirror.class);
+        defaultCastorList.add(org.nutz.castor.castor.Object2Object.class);
+        defaultCastorList.add(org.nutz.castor.castor.Object2String.class);
+        defaultCastorList.add(org.nutz.castor.castor.SqlDate2String.class);
+        defaultCastorList.add(org.nutz.castor.castor.SqlDate2Timestamp.class);
+        defaultCastorList.add(org.nutz.castor.castor.SqlTime2String.class);
+        defaultCastorList.add(org.nutz.castor.castor.SqlTime2Timestamp.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2Array.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2BigDecimal.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2Boolean.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2Byte.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2Calendar.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2Character.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2Class.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2Collection.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2Datetime.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2Double.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2Email.class);
         defaultCastorList.add(org.nutz.castor.castor.String2Enum.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2File.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2Float.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2Integer.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2Long.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2Map.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2Mirror.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2Object.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2Pattern.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2Set.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2Short.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2SqlDate.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2SqlTime.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2TimeZone.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2Timestamp.class);
+        defaultCastorList.add(org.nutz.castor.castor.TimeZone2String.class);
+        defaultCastorList.add(org.nutz.castor.castor.Timestamp2Calendar.class);
+        defaultCastorList.add(org.nutz.castor.castor.Timestamp2Datetime.class);
+        defaultCastorList.add(org.nutz.castor.castor.Timestamp2Long.class);
+        defaultCastorList.add(org.nutz.castor.castor.Timestamp2SqlDate.class);
+        defaultCastorList.add(org.nutz.castor.castor.Timestamp2SqlTime.class);
+        defaultCastorList.add(org.nutz.castor.castor.Timestamp2String.class);
+        defaultCastorList.add(org.nutz.castor.castor.String2DateFormat.class);
+
+        defaultCastorList.add(org.nutz.castor.castor.String2TmInfo.class);
+        defaultCastorList.add(org.nutz.castor.castor.Integer2TmInfo.class);
+        defaultCastorList.add(org.nutz.castor.castor.Long2TmInfo.class);
+        defaultCastorList.add(org.nutz.castor.castor.TmInfo2String.class);
+        defaultCastorList.add(org.nutz.castor.castor.TmInfo2Long.class);
+        defaultCastorList.add(org.nutz.castor.castor.TmInfo2Integer.class);
+
+        if (NutConf.HAS_LOCAL_DATE_TIME) {
+            defaultCastorList.add(org.nutz.castor.castor.String2LocalDateTime.class);
+            defaultCastorList.add(org.nutz.castor.castor.String2LocalTime.class);
+            defaultCastorList.add(org.nutz.castor.castor.String2LocalDate.class);
+            defaultCastorList.add(org.nutz.castor.castor.LocalDate2String.class);
+            defaultCastorList.add(org.nutz.castor.castor.LocalTime2String.class);
+            defaultCastorList.add(org.nutz.castor.castor.LocalDateTime2String.class);
+        }
     }
-    
+
     private static Castors one = new Castors();
 }

@@ -21,8 +21,19 @@ import java.lang.annotation.Target;
 @Documented
 public @interface One {
 
-    Class<?> target();
+	/**
+	 * 关联类
+	 */
+    Class<?> target() default Object.class;
 
-    String field();
+    /**
+     * 关联属性名, 默认是属性名称加Id. 例如属性叫master,那么默认值是masterId;
+     */
+    String field() default "_";
+    
+    /**
+     * 指定关联类的一个属性名,缺省情况下,按参考字段名{@link #field()}的类型选取@Id或者@Name等主键字段
+     */
+    String key() default "";
 
 }

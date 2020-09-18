@@ -9,19 +9,46 @@ import org.nutz.lang.Lang;
 
 public class UpdateFieldsByChainPItem extends AbstractPItem {
 
+    private static final long serialVersionUID = 1L;
+
     private Chain chain;
 
     public UpdateFieldsByChainPItem(Chain chain) {
         this.chain = chain;
     }
 
+    @Override
     public void joinSql(Entity<?> en, StringBuilder sb) {
         if (chain.size() > 0) {
             sb.append(" SET ");
             Chain c = chain.head();
             while (c != null) {
-                sb.append(this._fmtcolnm(en, c.name()));
-                sb.append("=? ,");
+                sb.append(this._fmtcolnm(en, c.name())).append('=');
+                if (c.special()) {
+                    Chain head = c;
+                    if (head.value() != null && head.value() instanceof String) {
+                        String str = (String) head.value();
+                        if (str.length() > 0) {
+                            switch (str.charAt(0)) {
+                                case '+':
+                                case '-':
+                                case '*':
+                                case '/':
+                                case '%':
+                                case '&':
+                                case '^':
+                                case '|':
+                                    sb.append(this._fmtcolnm(en, c.name()));
+                                    break;
+                                default:
+                            }
+                        }
+                    }
+                    sb.append(head.value());
+                } else {
+                    sb.append("?");
+                }
+                sb.append(',');
                 c = c.next();
             }
             sb.deleteCharAt(sb.length() - 1);
@@ -31,31 +58,47 @@ public class UpdateFieldsByChainPItem extends AbstractPItem {
         }
     }
 
+    @Override
     public int joinAdaptor(Entity<?> en, ValueAdaptor[] adaptors, int off) {
         Chain c = chain.head();
         while (c != null) {
-            MappingField mf = en.getField(c.name());
-            // TODO 移除这种数组下标用++的写法!!!
-            if (c.adaptor() == null)
-                adaptors[off++] = (null == mf ? Jdbcs.getAdaptorBy(c.value()) : mf.getAdaptor());
-            else
-                adaptors[off++] = c.adaptor();
+            if (!c.special()) {
+                MappingField mf = en.getField(c.name());
+                // TODO 移除这种数组下标用++的写法!!!
+                if (c.adaptor() == null) {
+                    adaptors[off++] = (null == mf ? Jdbcs.getAdaptorBy(c.value()) : mf.getAdaptor());
+                } else {
+                    adaptors[off++] = c.adaptor();
+                }
+            }
             c = c.next();
         }
         return off;
     }
 
+    @Override
     public int joinParams(Entity<?> en, Object obj, Object[] params, int off) {
         Chain c = chain.head();
         while (c != null) {
-            params[off++] = c.value();
+            if (!c.special()) {
+                params[off++] = c.value();
+            }
             c = c.next();
         }
         return off;
     }
 
+    @Override
     public int paramCount(Entity<?> en) {
-        return chain.size();
+        int count = 0;
+        Chain c = chain.head();
+        while (c != null) {
+            if (!c.special()) {
+                count++;
+            }
+            c = c.next();
+        }
+        return count;
     }
 
 }

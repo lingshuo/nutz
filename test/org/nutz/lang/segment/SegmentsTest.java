@@ -1,6 +1,6 @@
 package org.nutz.lang.segment;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 
 import org.junit.Test;
 import org.nutz.lang.Lang;
@@ -16,6 +16,13 @@ public class SegmentsTest {
         String str = Segments.replace(ptn, context);
 
         assertEquals("1${A}2haha3${C}4", str);
+    }
+    
+    @Test
+    public void test_issue_722() {
+        Context ctx = Lang.context();
+        assertEquals("^.+abc.+$", Segments.replace("^.+abc.+$", ctx));
+//        assertEquals("^.+abc.+${", Segments.replace("^.+abc.+${", ctx));
     }
 
 }

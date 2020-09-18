@@ -1,5 +1,7 @@
 package org.nutz.ioc;
 
+import java.lang.annotation.Annotation;
+
 /**
  * Ioc 容器接口
  * 
@@ -58,4 +60,13 @@ public interface Ioc {
      */
     void depose();
 
+    String[] getNamesByType(Class<?> klass);
+    
+    String[] getNamesByAnnotation(Class<? extends Annotation> klass);
+    
+    <K> K getByType(Class<K> klass);
+    
+    Ioc addBean(String name, Object obj);
+    
+    Class<?> getType(String name) throws ObjectLoadException;
 }

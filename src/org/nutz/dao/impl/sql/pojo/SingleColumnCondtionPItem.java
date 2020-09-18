@@ -8,6 +8,8 @@ import org.nutz.lang.Lang;
 
 public class SingleColumnCondtionPItem extends AbstractPItem {
 
+    private static final long serialVersionUID = 1L;
+
     private ValueAdaptor va;
 
     private Object def;
@@ -23,7 +25,7 @@ public class SingleColumnCondtionPItem extends AbstractPItem {
     public SingleColumnCondtionPItem(MappingField mf, Object def) {
         this.mf = mf;
         this.va = mf.getAdaptor();
-        this.colName = mf.getColumnName();
+        this.colName = mf.getColumnNameInSql();
         this.colType = mf.getTypeClass();
         this.def = def;
     }
@@ -50,8 +52,10 @@ public class SingleColumnCondtionPItem extends AbstractPItem {
             else if (null != def)
                 params[off++] = def;
             // 试图转换传入的对象
-            else if (null != obj)
+            else if (null != obj) {
+                // TODO 这是啥规则?!!! 完全搞不懂!!!
                 params[off++] = Castors.me().castTo(obj, colType);
+            }
             // 逼急了，老子抛异常了!
             else
                 throw Lang.impossible();
@@ -60,18 +64,20 @@ public class SingleColumnCondtionPItem extends AbstractPItem {
     }
 
     public void joinSql(Entity<?> en, StringBuilder sb) {
+        if (top)
+            sb.append(" WHERE ");
         if (null != mf && !casesensitive)
             switch (mf.getColumnType()) {
             case CHAR:
             case VARCHAR:
             case TEXT:
-                sb.append(" WHERE LOWER(").append(colName).append(")=LOWER(?)");
+                sb.append("LOWER(").append(colName).append(")=LOWER(?)");
                 return;
             default :
                 break;
             }
 
-        sb.append(" WHERE ").append(colName).append("=?");
+        sb.append(colName).append("=?");
     }
 
     public int joinAdaptor(Entity<?> en, ValueAdaptor[] adaptors, int off) {

@@ -6,9 +6,12 @@ import java.util.Map.Entry;
 import org.nutz.ioc.meta.IocEventSet;
 import org.nutz.ioc.meta.IocField;
 import org.nutz.ioc.meta.IocObject;
+import org.nutz.ioc.meta.IocValue;
+import org.nutz.ioc.val.StaticValue;
 import org.nutz.lang.Lang;
 import org.nutz.lang.Strings;
 import org.nutz.lang.meta.Pair;
+import org.nutz.lang.util.Regex;
 
 /**
  * @author zozoh(zozohtnt@gmail.com)
@@ -17,11 +20,11 @@ import org.nutz.lang.meta.Pair;
  */
 public abstract class Iocs {
 
-    private static final String OBJFIELDS = "^(type|scope|singleton|fields|args|events)$";
+    private static final String OBJFIELDS = "^(type|scope|singleton|fields|args|events|factory)$";
 
     public static boolean isIocObject(Map<String, ?> map) {
         for (Entry<String, ?> en : map.entrySet())
-            if (!en.getKey().matches(OBJFIELDS))
+            if (!Regex.match(OBJFIELDS, en.getKey()))
                 return false;
         return true;
     }
@@ -53,7 +56,7 @@ public abstract class Iocs {
         if (me.getType() == null)
             me.setType(it.getType());
 
-        // don't need merge signleon
+        // don't need merge singleton
 
         // merge events
         if (me.getEvents() == null) {
@@ -79,10 +82,55 @@ public abstract class Iocs {
             me.copyArgys(it.getArgs());
 
         // merge fields
-        for (IocField fld : it.getFields())
+        for (IocField fld : it.getFields().values())
             if (!me.hasField(fld.getName()))
                 me.addField(fld);
 
         return me;
+    }
+    
+    public static IocValue convert(String value, boolean dftRefer) {
+        IocValue iocValue = new IocValue();
+        if (dftRefer && value.startsWith(":")) {
+            iocValue.setType(IocValue.TYPE_NORMAL);
+            iocValue.setValue(value.substring(1));
+//        } else if (value.startsWith("$")) {
+//            iocValue.setType(IocValue.TYPE_REFER);
+//            iocValue.setValue(value.substring(1));
+        }
+        else if (value.contains(":")) {
+            String type = value.substring(0, value.indexOf(':'));
+            if (IocValue.types.contains(type)) {
+                iocValue.setType(type);
+                if (value.endsWith(":")) {
+                    iocValue.setValue("");
+                }
+                else
+                    iocValue.setValue(value.substring(value.indexOf(':') + 1));
+            } else {
+                iocValue.setType(IocValue.TYPE_NORMAL);
+                iocValue.setValue(value);
+            }
+        } else {
+            // XXX 兼容性改变, 1.b.52 开始默认就是refer, 如果真的要输入常量
+            //log.info("auto set as         refer:" + value);
+            iocValue.setType(IocValue.TYPE_REFER);
+            iocValue.setValue(value);
+        }
+        return iocValue;
+    }
+    
+    public static Object self(Object obj) {
+        return obj;
+    }
+    
+    public static IocObject wrap(Object obj) {
+        IocObject iobj = new IocObject();
+        if (obj != null)
+            iobj.setType(obj.getClass());
+        iobj.setFactory(Iocs.class.getName() + "#self");
+        IocValue ival = new IocValue(null, new StaticValue(obj));
+        iobj.addArg(ival);
+        return iobj;
     }
 }

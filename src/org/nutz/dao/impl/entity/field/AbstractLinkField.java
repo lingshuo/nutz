@@ -42,9 +42,9 @@ public abstract class AbstractLinkField extends AbstractEntityField implements L
 
         this.setType(info.fieldType);
 
-        if (getTypeMirror().isOf(Collection.class)) {
+        if (getMirror().isOf(Collection.class)) {
             callback = new PojoQueryEntityCallback();
-        } else if (getTypeMirror().isOf(Map.class)) {
+        } else if (getMirror().isOf(Map.class)) {
             callback = new PojoQueryEntityCallback();
         } else if (getTypeClass().isArray()) {
             callback = new PojoQueryEntityCallback();
@@ -88,4 +88,16 @@ public abstract class AbstractLinkField extends AbstractEntityField implements L
         return linkedField;
     }
 
+    protected Class<?> guessTargetClass(LinkInfo info, Class<?> klass) {
+        if (!klass.equals(Object.class))
+            return klass;
+        Mirror<?> mirror = Mirror.me(info.fieldType);
+        if (mirror.isCollection()) {
+            return (Class<?>) mirror.getGenericsType(0);
+        }
+        if (mirror.isMap()) {
+            return (Class<?>) mirror.getGenericsType(1);
+        }
+        return mirror.getType();
+    }
 }

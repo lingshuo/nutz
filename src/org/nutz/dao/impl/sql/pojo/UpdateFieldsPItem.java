@@ -8,6 +8,8 @@ import org.nutz.dao.util.Pojos;
 
 public class UpdateFieldsPItem extends InsertValuesPItem {
 
+    private static final long serialVersionUID = 1L;
+
     /**
      * 参考对象，根据这个对象来决定是否忽略空值
      */
@@ -19,7 +21,7 @@ public class UpdateFieldsPItem extends InsertValuesPItem {
 
     protected List<MappingField> _mfs(Entity<?> en) {
         if (null == mfs)
-            return Pojos.getFieldsForUpdate(_en(en), getFieldMatcher(), refer);
+        	return Pojos.getFieldsForUpdate(_en(en), getFieldMatcher(), refer == null ? pojo.getOperatingObject() : refer);
         return mfs;
     }
 
@@ -28,7 +30,7 @@ public class UpdateFieldsPItem extends InsertValuesPItem {
 
         sb.append(" SET ");
         for (MappingField mf : mfs)
-            sb.append(mf.getColumnName()).append("=?,");
+            sb.append(mf.getColumnNameInSql()).append("=?,");
 
         sb.setCharAt(sb.length() - 1, ' ');
     }

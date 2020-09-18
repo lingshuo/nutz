@@ -34,6 +34,12 @@ public class ObjectProxy {
      */
     private IocEventTrigger<Object> depose;
 
+    public ObjectProxy() {}
+
+    public ObjectProxy(Object obj) {
+        this.obj = obj;
+    }
+
     public ObjectProxy setWeaver(ObjectWeaver weaver) {
         this.weaver = weaver;
         return this;
@@ -55,17 +61,20 @@ public class ObjectProxy {
     }
 
     @SuppressWarnings("unchecked")
-    public <T> T get(Class<T> classOfT, IocMaking ing) {
+    public synchronized <T> T get(Class<T> classOfT, IocMaking ing) {
         Object re;
-        if (null != obj)
+        if (null != obj) {
             re = obj;
-        else if (null != weaver)
+        } else if (null != weaver) {
             re = weaver.onCreate(weaver.fill(ing, weaver.born(ing)));
-        else
+        } else {
             throw Lang.makeThrow("NullProxy for '%s'!", ing.getObjectName());
+        }
 
-        if (null != fetch)
+        if (null != fetch) {
             fetch.trigger(re);
+        }
+
         return (T) re;
     }
 
@@ -74,4 +83,7 @@ public class ObjectProxy {
             depose.trigger(obj);
     }
 
+    public Object getObj() {
+        return obj;
+    }
 }

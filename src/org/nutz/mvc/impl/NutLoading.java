@@ -2,14 +2,18 @@ package org.nutz.mvc.impl;
 
 import java.io.File;
 import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Properties;
 import java.util.Set;
 
 import org.nutz.Nutz;
 import org.nutz.ioc.Ioc;
 import org.nutz.ioc.Ioc2;
+import org.nutz.ioc.loader.annotation.IocBean;
 import org.nutz.json.Json;
 import org.nutz.json.JsonFormat;
 import org.nutz.lang.Encoding;
@@ -22,6 +26,7 @@ import org.nutz.log.Log;
 import org.nutz.log.Logs;
 import org.nutz.mvc.ActionChainMaker;
 import org.nutz.mvc.ActionInfo;
+import org.nutz.mvc.EntryDeterminer;
 import org.nutz.mvc.Loading;
 import org.nutz.mvc.LoadingException;
 import org.nutz.mvc.MessageLoader;
@@ -31,8 +36,8 @@ import org.nutz.mvc.SessionProvider;
 import org.nutz.mvc.Setup;
 import org.nutz.mvc.UrlMapping;
 import org.nutz.mvc.ViewMaker;
-import org.nutz.mvc.annotation.At;
 import org.nutz.mvc.annotation.ChainBy;
+import org.nutz.mvc.annotation.Determiner;
 import org.nutz.mvc.annotation.IocBy;
 import org.nutz.mvc.annotation.Localization;
 import org.nutz.mvc.annotation.SessionBy;
@@ -51,17 +56,29 @@ public class NutLoading implements Loading {
             log.infof("Nutz.Mvc[%s] is initializing ...", config.getAppName());
         }
         if (log.isDebugEnabled()) {
+            Properties sys = System.getProperties();
             log.debug("Web Container Information:");
             log.debugf(" - Default Charset : %s", Encoding.defaultEncoding());
             log.debugf(" - Current . path  : %s", new File(".").getAbsolutePath());
-            log.debugf(" - Java Version    : %s", System.getProperties().get("java.version"));
-            log.debugf(" - File separator  : %s", System.getProperties().get("file.separator"));
-            log.debugf(" - Timezone        : %s", System.getProperties().get("user.timezone"));
+            log.debugf(" - Java Version    : %s", sys.get("java.version"));
+            log.debugf(" - File separator  : %s", sys.get("file.separator"));
+            log.debugf(" - Timezone        : %s", sys.get("user.timezone"));
+            log.debugf(" - OS              : %s %s", sys.get("os.name"), sys.get("os.arch"));
+            log.debugf(" - ServerInfo      : %s", config.getServletContext().getServerInfo());
+            log.debugf(" - Servlet API     : %d.%d",
+                       config.getServletContext().getMajorVersion(),
+                       config.getServletContext().getMinorVersion());
+            if (config.getServletContext().getMajorVersion() > 2
+                || config.getServletContext().getMinorVersion() > 4)
+                log.debugf(" - ContextPath     : %s", config.getServletContext().getContextPath());
+            log.debugf(" - context.tempdir : %s", config.getAttribute("javax.servlet.context.tempdir"));
+            log.debugf(" - MainModule      : %s", config.getMainModule().getName());
         }
         /*
          * 准备返回值
          */
         UrlMapping mapping;
+        Ioc ioc = null;
 
         /*
          * 准备计时
@@ -83,12 +100,12 @@ public class NutLoading implements Loading {
             /*
              * 检查 Ioc 容器并创建和保存它
              */
-            createIoc(config, mainModule);
+            ioc = createIoc(config, mainModule);
 
             /*
              * 组装UrlMapping
              */
-            mapping = evalUrlMapping(config, mainModule);
+            mapping = evalUrlMapping(config, mainModule, ioc);
 
             /*
              * 分析本地化字符串
@@ -106,6 +123,15 @@ public class NutLoading implements Loading {
         catch (Exception e) {
             if (log.isErrorEnabled())
                 log.error("Error happend during start serivce!", e);
+            if (ioc != null) {
+                log.error("try to depose ioc");
+                try {
+                    ioc.depose();
+                }
+                catch (Throwable e2) {
+                    log.error("error when depose ioc", e);
+                }
+            }
             throw Lang.wrapThrow(e, LoadingException.class);
         }
 
@@ -118,7 +144,8 @@ public class NutLoading implements Loading {
 
     }
 
-    private UrlMapping evalUrlMapping(NutConfig config, Class<?> mainModule) throws Exception {
+    protected UrlMapping evalUrlMapping(NutConfig config, Class<?> mainModule, Ioc ioc)
+            throws Exception {
         /*
          * @ TODO 个人建议可以将这个方法所涉及的内容转换到Loadings类或相应的组装类中,
          * 以便将本类加以隔离,使本的职责仅限于MVC整体的初使化,而不再负责UrlMapping的加载
@@ -134,7 +161,7 @@ public class NutLoading implements Loading {
         /*
          * 创建视图工厂
          */
-        ViewMaker[] makers = createViewMakers(mainModule);
+        ViewMaker[] makers = createViewMakers(mainModule, ioc);
 
         /*
          * 创建动作链工厂
@@ -146,34 +173,37 @@ public class NutLoading implements Loading {
          */
         ActionInfo mainInfo = Loadings.createInfo(mainModule);
 
+        // fix issue #1337
+        Determiner ann = mainModule.getAnnotation(Determiner.class);
+        EntryDeterminer determiner = null == ann ? new NutEntryDeterminer() : Loadings.evalObj(config, ann.value(), ann.args());
+
         /*
          * 准备要加载的模块列表
          */
         // TODO 为什么用Set呢? 用List不是更快吗?
-        Set<Class<?>> modules = Loadings.scanModules(mainModule);
+        Set<Class<?>> modules = getModuleClasses(ioc, mainModule, determiner);
 
-        if (modules.isEmpty())
+        if (modules.isEmpty()) {
             if (log.isWarnEnabled())
                 log.warn("None module classes found!!!");
+        }
 
-        boolean hasAtMethod = false;
+        int atMethods = 0;
         /*
          * 分析所有的子模块
          */
+        if (log.isDebugEnabled())
+            log.debugf("Use %s as EntryMethodDeterminer", determiner.getClass().getName());
         for (Class<?> module : modules) {
-            ActionInfo moduleInfo = Loadings.createInfo(module).mergeWith(mainInfo);
+            ActionInfo moduleInfo = Loadings.createInfo(module).mergeWith(mainInfo, true);
             for (Method method : module.getMethods()) {
-                /*
-                 * public 并且声明了 @At 的函数，才是入口函数
-                 */
-                if (!Modifier.isPublic(method.getModifiers())
-                    || !method.isAnnotationPresent(At.class))
+                if (!determiner.isEntry(module, method))
                     continue;
                 // 增加到映射中
-                ActionInfo info = Loadings.createInfo(method).mergeWith(moduleInfo);
+                ActionInfo info = Loadings.createInfo(method).mergeWith(moduleInfo, false);
                 info.setViewMakers(makers);
                 mapping.add(maker, info, config);
-                hasAtMethod = true;
+                atMethods++;
             }
 
             // 记录pathMap
@@ -184,21 +214,29 @@ public class NutLoading implements Loading {
             }
         }
 
-        if (!hasAtMethod)
+        if (atMethods == 0) {
             if (log.isWarnEnabled())
                 log.warn("None @At found in any modules class!!");
+        } else {
+            log.infof("Found %d module methods", atMethods);
+        }
+        
+        config.setUrlMapping(mapping);
+        config.setActionChainMaker(maker);
+        config.setViewMakers(makers);
 
         return mapping;
     }
 
-    private static void createContext(NutConfig config) {
+    protected void createContext(NutConfig config) {
         // 构建一个上下文对象，方便子类获取更多的环境信息
         // 同时，所有 Filter 和 Adaptor 都可以用 ${app.root} 来填充自己
         Context context = Lang.context();
-        context.set("app.root", config.getAppRoot());
+        String appRoot = config.getAppRoot();
+        context.set("app.root", appRoot);
 
         if (log.isDebugEnabled()) {
-            log.debugf(">> app.root = %s", config.getAppRoot());
+            log.debugf(">> app.root = %s", appRoot);
         }
 
         // 载入环境变量
@@ -214,14 +252,14 @@ public class NutLoading implements Loading {
         config.getServletContext().setAttribute(Loading.CONTEXT_NAME, context);
     }
 
-    private UrlMapping createUrlMapping(NutConfig config) throws Exception {
+    protected UrlMapping createUrlMapping(NutConfig config) throws Exception {
         UrlMappingBy umb = config.getMainModule().getAnnotation(UrlMappingBy.class);
         if (umb != null)
             return Loadings.evalObj(config, umb.value(), umb.args());
         return new UrlMappingImpl();
     }
 
-    private ActionChainMaker createChainMaker(NutConfig config, Class<?> mainModule) {
+    protected ActionChainMaker createChainMaker(NutConfig config, Class<?> mainModule) {
         ChainBy ann = mainModule.getAnnotation(ChainBy.class);
         ActionChainMaker maker = null == ann ? new NutActionChainMaker(new String[]{})
                                             : Loadings.evalObj(config, ann.type(), ann.args());
@@ -230,7 +268,7 @@ public class NutLoading implements Loading {
         return maker;
     }
 
-    private void evalSetup(NutConfig config, Class<?> mainModule) throws Exception {
+    protected void evalSetup(NutConfig config, Class<?> mainModule) throws Exception {
         SetupBy sb = mainModule.getAnnotation(SetupBy.class);
         if (null != sb) {
             if (log.isInfoEnabled())
@@ -238,10 +276,31 @@ public class NutLoading implements Loading {
             Setup setup = Loadings.evalObj(config, sb.value(), sb.args());
             config.setAttributeIgnoreNull(Setup.class.getName(), setup);
             setup.init(config);
+        } else if (config.getIoc() != null) {
+            String[] names = config.getIoc().getNames();
+            Arrays.sort(names);
+            boolean flag = true;
+            for (String name : names) {
+                if (name != null && name.startsWith(Setup.IOCNAME)) {
+                    if (flag) {
+                        flag = false;
+                        if (log.isInfoEnabled())
+                            log.info("Setup application...");
+                    }
+                    log.debug("load Setup from Ioc by name=" + name);
+                    Setup setup = config.getIoc().get(Setup.class, name);
+                    config.setAttributeIgnoreNull(Setup.class.getName(), setup);
+                    setup.init(config);
+                }
+            }
+        } else if (Setup.class.isAssignableFrom(mainModule)) { // MainModule自己就实现了Setup接口呢?
+        	Setup setup = (Setup)Mirror.me(mainModule).born();
+        	config.setAttributeIgnoreNull(Setup.class.getName(), setup);
+        	setup.init(config);
         }
     }
 
-    private void evalLocalization(NutConfig config, Class<?> mainModule) {
+    protected void evalLocalization(NutConfig config, Class<?> mainModule) {
         Localization lc = mainModule.getAnnotation(Localization.class);
         if (null != lc) {
             if (log.isDebugEnabled())
@@ -277,58 +336,79 @@ public class NutLoading implements Loading {
         }
     }
 
-    private ViewMaker[] createViewMakers(Class<?> mainModule) throws Exception {
+    protected ViewMaker[] createViewMakers(Class<?> mainModule, Ioc ioc) throws Exception {
         Views vms = mainModule.getAnnotation(Views.class);
-        ViewMaker[] makers;
-        int i = 0;
+        List<ViewMaker> makers = new ArrayList<ViewMaker>();
         if (null != vms) {
-            makers = new ViewMaker[vms.value().length + 1];
-            for (; i < vms.value().length; i++)
-                makers[i] = Mirror.me(vms.value()[i]).born();
-
-        } else {
-            makers = new ViewMaker[1];
+            for (int i = 0; i < vms.value().length; i++) {
+                if (vms.value()[i].getAnnotation(IocBean.class) != null && ioc != null) {
+                    makers.add(ioc.get(vms.value()[i]));
+                } else {
+                    makers.add(Mirror.me(vms.value()[i]).born());
+                }
+            }
         }
-        makers[i] = new DefaultViewMaker();// 优先使用用户自定义
+        if (ioc != null) {
+            String[] names = ioc.getNames();
+            Arrays.sort(names);
+            for (String name : ioc.getNames()) {
+                if (name != null && name.startsWith(ViewMaker.IOCNAME)) {
+                    log.debug("add ViewMaker from Ioc by name=" + name);
+                    makers.add(ioc.get(ViewMaker.class, name));
+                }
+            }
+        }
+        makers.add(new DefaultViewMaker());// 优先使用用户自定义
 
         if (log.isDebugEnabled()) {
             StringBuilder sb = new StringBuilder();
-            sb.append(makers[0].getClass().getSimpleName());
-            for (i = 0; i < makers.length - 1; i++)
-                sb.append(',').append(makers[i].getClass().getSimpleName());
+            for (ViewMaker maker : makers) {
+                sb.append(maker.getClass().getSimpleName()).append(".class,");
+            }
+            sb.setLength(sb.length() - 1);
             log.debugf("@Views(%s)", sb);
         }
 
-        return makers;
+        return makers.toArray(new ViewMaker[makers.size()]);
     }
 
-    private void createIoc(NutConfig config, Class<?> mainModule) throws Exception {
+    protected Ioc createIoc(NutConfig config, Class<?> mainModule) throws Exception {
         IocBy ib = mainModule.getAnnotation(IocBy.class);
         if (null != ib) {
             if (log.isDebugEnabled())
-                log.debugf("@IocBy(%s)", ib.type().getName());
+                log.debugf("@IocBy(type=%s, args=%s,init=%s)",
+                           ib.type().getName(),
+                           Json.toJson(ib.args()),
+                           Json.toJson(ib.init()));
 
             Ioc ioc = Mirror.me(ib.type()).born().create(config, ib.args());
             // 如果是 Ioc2 的实现，增加新的 ValueMaker
             if (ioc instanceof Ioc2) {
                 ((Ioc2) ioc).addValueProxyMaker(new ServletValueProxyMaker(config.getServletContext()));
             }
+
+            // 如果给定了 Ioc 的初始化，则依次调用
+            for (String objName : ib.init()) {
+                ioc.get(null, objName);
+            }
+
             // 保存 Ioc 对象
             Mvcs.setIoc(ioc);
-
+            return ioc;
         } else if (log.isInfoEnabled())
             log.info("!!!Your application without @IocBy supporting");
+        return null;
     }
 
     @SuppressWarnings({"all"})
-    private void createSessionProvider(NutConfig config, Class<?> mainModule) throws Exception {
+    protected void createSessionProvider(NutConfig config, Class<?> mainModule) throws Exception {
         SessionBy sb = mainModule.getAnnotation(SessionBy.class);
         if (sb != null) {
             SessionProvider sp = null;
             if (sb.args() != null && sb.args().length == 1 && sb.args()[0].startsWith("ioc:"))
                 sp = config.getIoc().get(sb.value(), sb.args()[0].substring(4));
             else
-                sp = Mirror.me(sb.value()).born(sb.args());
+                sp = Mirror.me(sb.value()).born((Object[])sb.args());
             if (log.isInfoEnabled())
                 log.info("SessionBy --> " + sp);
             config.setSessionProvider(sp);
@@ -365,4 +445,7 @@ public class NutLoading implements Loading {
             log.infof("Nutz.Mvc[%s] is down in %sms", config.getAppName(), sw.getDuration());
     }
 
+    protected Set<Class<?>> getModuleClasses(Ioc ioc, Class<?> mainModule, EntryDeterminer determiner) {
+        return Loadings.scanModules(ioc, mainModule, determiner);
+    }
 }

@@ -1,5 +1,7 @@
 package org.nutz.ioc;
 
+import java.lang.annotation.Annotation;
+
 /**
  * 容器更高级的方法
  * 
@@ -32,10 +34,18 @@ public interface Ioc2 extends Ioc {
     IocContext getIocContext();
 
     /**
-     * 增加 ValuePfoxyMaker
+     * 增加 ValueProxyMaker
      * 
      * @see org.nutz.ioc.ValueProxy
      * @see org.nutz.ioc.ValueProxyMaker
      */
     void addValueProxyMaker(ValueProxyMaker vpm);
+    
+    String[] getNamesByType(Class<?> klass, IocContext context);
+    
+    <T> T getByType(Class<T> type, IocContext context);
+    
+    String[] getNamesByAnnotation(Class<? extends Annotation> klass, IocContext context);
+    
+    Class<?> getType(String beanName, IocContext context) throws ObjectLoadException;
 }

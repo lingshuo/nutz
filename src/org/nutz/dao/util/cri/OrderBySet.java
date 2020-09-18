@@ -10,9 +10,11 @@ import org.nutz.dao.sql.Pojo;
 
 public class OrderBySet extends NoParamsPItem implements OrderBy {
 
+    private static final long serialVersionUID = 1L;
+
     private List<OrderByItem> list;
 
-    OrderBySet() {
+    protected OrderBySet() {
         list = new ArrayList<OrderByItem>(3);
     }
 
@@ -24,8 +26,7 @@ public class OrderBySet extends NoParamsPItem implements OrderBy {
                 sb.append(", ");
             }
             sb.setCharAt(sb.length() - 2, ' ');
-        } else
-            ;// OK,无需添加.
+        } // OK,无需添加.
     }
 
     public String toSql(Entity<?> en) {
@@ -47,8 +48,7 @@ public class OrderBySet extends NoParamsPItem implements OrderBy {
         list.add(desc);
         return this;
     }
-
-    @Override
+    
     public void setPojo(Pojo pojo) {
         super.setPojo(pojo);
         for (OrderByItem obi : list)
@@ -57,5 +57,18 @@ public class OrderBySet extends NoParamsPItem implements OrderBy {
 
     public List<OrderByItem> getItems() {
         return list;
+    }
+    
+    public String toString() {
+    	return toSql(null);
+    }
+    
+    public OrderBy orderBy(String name, String dir) {
+        if ("asc".equalsIgnoreCase(dir)) {
+            this.asc(name);
+        } else {
+            this.desc(name);
+        }
+        return this;
     }
 }

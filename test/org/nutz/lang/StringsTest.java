@@ -13,6 +13,148 @@ import java.util.HashSet;
 import org.junit.Test;
 
 public class StringsTest {
+
+    @Test
+    public void test_replaceBy() {
+        assertEquals("xB-", Strings.replaceBy("ABC", Lang.map("{A:'x',C:'-'}")));
+        assertEquals("AB-x", Strings.replaceBy("ABCA", Lang.map("{A:'x',C:'-',AB:null}")));
+        assertEquals("AB-AD-x",
+                     Strings.replaceBy("ABCADCA", Lang.map("{A:'x',C:'-',D:'$','A[BD]':null}")));
+    }
+
+    @Test
+    public void test_line_2_hump() {
+        assertEquals(Strings.line2Hump("f_parent_no_leader"), "FParentNoLeader");
+    }
+
+    @Test
+    public void test_hump_2_line() {
+        assertEquals(Strings.hump2Line("fParentNoLeader"), "f_parent_no_leader");
+    }
+
+    @Test
+    public void test_split_with_escape_quote() {
+        String[] list = Strings.split("a \"nm:\\\"A\\\"\"", false, ' ');
+        assertEquals(2, list.length);
+        assertEquals("a", list[0]);
+        assertEquals("nm:\"A\"", list[1]);
+    }
+
+    @Test
+    public void test_split_by_whitespace() {
+        String[] list = Strings.split("  a   b   ", false, ' ');
+        assertEquals(2, list.length);
+        assertEquals("a", list[0]);
+        assertEquals("b", list[1]);
+    }
+
+    @Test
+    public void test_by_eacape() {
+        String[] list = Strings.split("a\\nb | a\\ b", true, '|');
+        assertEquals(2, list.length);
+        assertEquals("a\\nb ", list[0]);
+        assertEquals(" a\\ b", list[1]);
+    }
+
+    @Test
+    public void test_by_escape_in_quote() {
+        String[] list = Strings.split("me -set \"PS1=\\u:\\W$\"", true, '|');
+        assertEquals(1, list.length);
+        assertEquals("me -set \"PS1=\\u:\\W$\"", list[0]);
+    }
+
+    @Test
+    public void test_pipes_parse2() {
+        String[] list = Strings.split("a | b 'x' | d ", true, '|');
+        assertEquals(3, list.length);
+        assertEquals("a ", list[0]);
+        assertEquals(" b 'x' ", list[1]);
+        assertEquals(" d ", list[2]);
+    }
+
+    @Test
+    public void test_pipes_parse() {
+        String[] list = Strings.split(" a 'x' ", true, '|');
+        assertEquals(1, list.length);
+        assertEquals(" a 'x' ", list[0]);
+    }
+
+    @Test
+    public void test_tokens_parse() {
+        String[] list = Strings.split("echo 'a'bc", true, ' ');
+        assertEquals(2, list.length);
+        assertEquals("echo", list[0]);
+        assertEquals("'a'bc", list[1]);
+
+        list = Strings.split("echo 'a b'", false, ' ');
+        assertEquals(2, list.length);
+        assertEquals("echo", list[0]);
+        assertEquals("a b", list[1]);
+    }
+
+    /**
+     * for issue #606 (report by <a href="https://github.com/Rekoe">Rekoe</a>)
+     */
+    @Test
+    public void test_isQuoteBy_null() {
+        assertTrue(Strings.isQuoteBy("{abc}", "{", "}"));
+        assertFalse(Strings.isQuoteBy(null, "{", "}"));
+        assertFalse(Strings.isQuoteBy("{abc}", "{", null));
+        assertFalse(Strings.isQuoteBy("{abc}", null, "}"));
+        assertFalse(Strings.isQuoteBy("{abc}", null, null));
+    }
+
+    @Test
+    public void test_is_full_width_character() {
+        assertFalse(Strings.isFullWidthCharacter('a'));
+        assertTrue(Strings.isFullWidthCharacter('ａ'));
+        assertFalse(Strings.isFullWidthCharacter('a'));
+        assertTrue(Strings.isFullWidthCharacter('ａ'));
+        assertTrue(Strings.isFullWidthCharacter('。'));
+    }
+
+    @Test
+    public void test_is_full_width_string() {
+        assertTrue(Strings.isFullWidthString("おはようございます"));
+        assertTrue(Strings.isFullWidthString("アイシダイク"));
+        assertTrue(Strings.isFullWidthString("蒼井そら"));
+        assertTrue(Strings.isFullWidthString("我是全角字我是办饺子"));
+        assertTrue(Strings.isFullWidthString("ｗｏ我爱你中国，哈哈哈"));
+        assertFalse(Strings.isFullWidthString("ｗｏ我爱你中国,哈哈哈"));
+        assertFalse(Strings.isFullWidthString("23gdgrt34t98))*&%$#{}:~!@"));
+    }
+
+    @Test
+    public void test_is_half_width_string() {
+        assertFalse(Strings.isHalfWidthString("おはようございます"));
+        assertFalse(Strings.isHalfWidthString("アイシダイク"));
+        assertFalse(Strings.isHalfWidthString("蒼井そら"));
+        assertFalse(Strings.isHalfWidthString("我是全角字我是办饺子"));
+        assertFalse(Strings.isHalfWidthString("ｗｏ我爱你中国，哈哈哈"));
+        assertFalse(Strings.isHalfWidthString("ｗｏ我爱你中国,哈哈哈"));
+        assertTrue(Strings.isHalfWidthString("23gdgrt34t98))*&%$#{}:~!@"));
+    }
+
+    @Test
+    public void test_is_chinese_character() {
+        assertTrue(Strings.isChineseCharacter('你'));
+        assertTrue(Strings.isChineseCharacter('．'));
+        assertTrue(Strings.isChineseCharacter('。'));
+        assertFalse(Strings.isChineseCharacter('A'));
+        assertFalse(Strings.isChineseCharacter('3'));
+        assertFalse(Strings.isChineseCharacter('.'));
+        assertFalse(Strings.isChineseCharacter('#'));
+        assertFalse(Strings.isChineseCharacter('~'));
+        assertFalse(Strings.isChineseCharacter('`'));
+    }
+
+    @Test
+    public void test_char_length() {
+        assertEquals(5, Strings.charLength("12345"));
+        assertEquals(10, Strings.charLength("１２３４５"));
+        assertEquals(15, Strings.charLength("１２３４５12345"));
+    }
+
     @Test
     public void test_dup_char_sequence() {
         assertEquals("", Strings.dup(null, 4));
@@ -22,19 +164,18 @@ public class StringsTest {
 
     @Test
     public void test_dup_char() {
-        assertEquals("", Strings.dup(null, 4));
         assertEquals("", Strings.dup(' ', 0));
         assertEquals("aaaa", Strings.dup('a', 4));
         assertEquals("    ", Strings.dup(' ', 4));
     }
 
     @Test
-    public void test_capitalize() {
-        assertNull(Strings.capitalize(null));
-        assertEquals("", Strings.capitalize(""));
-        assertEquals("A", Strings.capitalize("a"));
-        assertEquals("Aa", Strings.capitalize("aa"));
-        assertEquals("Aa", Strings.capitalize("Aa"));
+    public void test_upperFirst() {
+        assertNull(Strings.upperFirst(null));
+        assertEquals("", Strings.upperFirst(""));
+        assertEquals("A", Strings.upperFirst("a"));
+        assertEquals("Aa", Strings.upperFirst("aa"));
+        assertEquals("Aa", Strings.upperFirst("Aa"));
     }
 
     @Test
@@ -173,6 +314,16 @@ public class StringsTest {
         Strings.cutRight("abc", -1, 'c');
     }
 
+    @Test(expected = StringIndexOutOfBoundsException.class)
+    public void test_cut_left() {
+        assertNull(Strings.cutLeft(null, 2, 'c'));
+        assertEquals("ac", Strings.cutLeft("a", 2, 'c'));
+        assertEquals("ab", Strings.cutLeft("ab", 2, 'c'));
+        assertEquals("ab", Strings.cutLeft("abc", 2, 'c'));
+        assertEquals("", Strings.cutLeft("abc", 0, 'c'));
+        Strings.cutLeft("abc", -1, 'c');
+    }
+
     @Test
     public void test_align_left() {
         assertNull(Strings.alignLeft(null, 2, 'c'));
@@ -281,6 +432,8 @@ public class StringsTest {
         assertTrue(Strings.isEmail("mc02cxj@gmail.com"));
         assertTrue(Strings.isEmail("mc02cxj@sina.com.cn"));
         assertTrue(Strings.isEmail("mc02cxj.test@sina.com.cn"));
+        assertTrue(Strings.isEmail("ab1-23@1a.2b.3c.com"));
+        assertTrue(Strings.isEmail("xiaobai2-wu12.ji42@a1.b2.com"));
         Strings.isEmail(null);
     }
 
@@ -296,7 +449,38 @@ public class StringsTest {
     public void test_escape_html() {
         assertEquals("&lt;/article&gt;Oops &lt;script&gt;alert(&quot;hello world&quot;);&lt;/script&gt;",
                      Strings.escapeHtml("</article>Oops <script>alert(\"hello world\");</script>"));
-        assertEquals("alert(&#x27;hello world&#x27;);", Strings.escapeHtml("alert('hello world');"));
+        assertEquals("alert('hello world');", Strings.escapeHtml("alert('hello world');"));
+        assertEquals("&lt;b&gt;&amp;XYZ&lt;/b&gt;", Strings.escapeHtml("<b>&amp;XYZ</b>"));
     }
 
+    @Test
+    public void test_issue461() {
+        char here_is_zenkaku_space_char = '　';
+        String here_is_zenkaku_space_str = String.valueOf(here_is_zenkaku_space_char);
+        StringBuffer here_is_zenkaku_space_sb = new StringBuffer(here_is_zenkaku_space_str);
+        StringBuilder here_is_zenkaku_space_sber = new StringBuilder(here_is_zenkaku_space_str);
+
+        assertEquals("aaa",
+                     Strings.trim(here_is_zenkaku_space_str + "aaa" + here_is_zenkaku_space_str));
+        assertEquals("aaa",
+                     Strings.trim(here_is_zenkaku_space_sb.append("aaa")
+                                                          .append(here_is_zenkaku_space_char)));
+        assertEquals("aaa",
+                     Strings.trim(here_is_zenkaku_space_sber.append("aaa")
+                                                            .append(here_is_zenkaku_space_char)));
+    }
+
+    @Test
+    public void test_join_array() throws Exception {
+        assertTrue("1920x1080".equals(Strings.join("x", new String[]{"1920", "1080"})));
+        assertTrue("1920x1080".equals(Strings.join("x", new Integer[]{1920, 1080})));
+    }
+
+    @Test
+    public void test_change_charset() throws Exception {
+        assertTrue("你妹的".equals(Strings.changeCharset("\u4f60\u59b9\u7684",
+                                                      Encoding.CHARSET_UTF8)));
+        assertTrue("nutz是个好类库".equals(Strings.changeCharset("nutz\u662f\u4e2a\u597d\u7c7b\u5e93",
+                                                            Encoding.CHARSET_UTF8)));
+    }
 }

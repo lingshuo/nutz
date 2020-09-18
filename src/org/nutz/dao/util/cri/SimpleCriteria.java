@@ -1,35 +1,52 @@
 package org.nutz.dao.util.cri;
 
+import org.nutz.dao.Condition;
 import org.nutz.dao.Sqls;
 import org.nutz.dao.entity.Entity;
 import org.nutz.dao.impl.sql.pojo.AbstractPItem;
 import org.nutz.dao.jdbc.ValueAdaptor;
 import org.nutz.dao.pager.Pager;
 import org.nutz.dao.sql.Criteria;
+import org.nutz.dao.sql.GroupBy;
 import org.nutz.dao.sql.OrderBy;
 import org.nutz.dao.sql.Pojo;
 
-public class SimpleCriteria extends AbstractPItem implements Criteria, OrderBy {
+public class SimpleCriteria extends AbstractPItem implements Criteria, OrderBy, GroupBy {
+
+    private static final long serialVersionUID = 1L;
 
     private SqlExpressionGroup where;
 
     private OrderBySet orderBy;
+    
+    private GroupBySet groupBy;
 
     private Pager pager;
+    
+    private String beforeWhere;
 
     public SimpleCriteria() {
         where = new SqlExpressionGroup();
         orderBy = new OrderBySet();
+        groupBy = new GroupBySet();
+    }
+    
+    public SimpleCriteria(String beforeWhere) {
+        this();
+        this.beforeWhere = beforeWhere;
     }
 
     public void joinSql(Entity<?> en, StringBuilder sb) {
+        if (beforeWhere != null)
+            sb.append(beforeWhere);
         where.joinSql(en, sb);
+        groupBy.joinSql(en, sb);
         orderBy.joinSql(en, sb);
     }
 
-    @Override
     public void setPojo(Pojo pojo) {
         where.setPojo(pojo);
+        groupBy.setPojo(pojo);
         orderBy.setPojo(pojo);
     }
 
@@ -90,6 +107,16 @@ public class SimpleCriteria extends AbstractPItem implements Criteria, OrderBy {
     public SqlExpressionGroup where() {
         return where;
     }
+    
+    public GroupBy groupBy(String...names) {
+    	groupBy = new GroupBySet(names);
+    	return this;
+    }
+    
+    public GroupBy having(Condition cnd) {
+    	groupBy.having(cnd);
+    	return this;
+    }
 
     public OrderBy getOrderBy() {
         return orderBy;
@@ -97,5 +124,22 @@ public class SimpleCriteria extends AbstractPItem implements Criteria, OrderBy {
 
     public String toString() {
         return toSql(null);
+    }
+    
+    public OrderBy orderBy(String name, String dir) {
+        if ("asc".equalsIgnoreCase(dir)) {
+            this.asc(name);
+        } else {
+            this.desc(name);
+        }
+        return this;
+    }
+    
+    public GroupBy getGroupBy() {
+        return groupBy;
+    }
+    
+    public String getBeforeWhere() {
+        return beforeWhere;
     }
 }

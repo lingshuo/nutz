@@ -1,10 +1,14 @@
 package org.nutz.lang.util;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 
 import org.nutz.lang.Lang;
+import org.nutz.lang.Strings;
 
-public class LinkedCharArray {
+public class LinkedCharArray implements Serializable {
+
+	private static final long serialVersionUID = 1L;
 
     public LinkedCharArray() {
         this(256);
@@ -59,11 +63,10 @@ public class LinkedCharArray {
         return innerGet(offset++);
     }
 
-    public String popFirst(int num) {
-        StringBuilder sb = new StringBuilder();
+    public LinkedCharArray popFirst(int num) {
         for (int i = 0; i < num; i++)
-            sb.append(popFirst());
-        return sb.toString();
+            popFirst();
+        return this;
     }
 
     public char popLast() {
@@ -179,6 +182,10 @@ public class LinkedCharArray {
 
     public String toString() {
         return new String(toArray());
+    }
+
+    public String toTrimmed() {
+        return Strings.trim(toString());
     }
 
     public String popAll() {

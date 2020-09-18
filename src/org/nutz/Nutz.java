@@ -10,6 +10,11 @@ package org.nutz;
  * 
  */
 public final class Nutz {
+    
+    /**
+     * 标示类,没有new的可能性
+     */
+    Nutz() {}
 
     /**
      * 获取 Nutz 的版本号，版本号的命名规范
@@ -25,10 +30,30 @@ public final class Nutz {
      * <li>发布流水 - 每次发布增加 1
      * </ul>
      * 
-     * @return zTask 项目的版本号
+     * @return nutz 项目的版本号
      */
     public static String version() {
-        return "1.b.46";
+        return "1.r.68-SNAPSHOT";
     }
 
+    /**
+     * 大版本号
+     */
+    public static int majorVersion() {
+        return 1;
+    }
+
+    /**
+     * 发布流水
+     */
+    public static int minorVersion() {
+        return 68;
+    }
+
+    /**
+     * 质量号
+     */
+    public static String releaseLevel() {
+        return "r";
+    }
 }

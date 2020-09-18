@@ -2,10 +2,10 @@ package org.nutz.json.impl;
 
 import java.io.IOException;
 import java.io.Writer;
-import java.lang.reflect.Array;
-import java.lang.reflect.Method;
+import java.text.DateFormat;
+import java.text.Format;
 import java.util.ArrayList;
-import java.util.Collection;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -17,18 +17,15 @@ import java.util.regex.Pattern;
 import org.nutz.json.Json;
 import org.nutz.json.JsonFormat;
 import org.nutz.json.JsonRender;
-import org.nutz.json.ToJson;
-import org.nutz.json.entity.JsonEntity;
+import org.nutz.json.JsonTypeHandler;
 import org.nutz.json.entity.JsonEntityField;
-import org.nutz.lang.FailToGetValueException;
-import org.nutz.lang.Lang;
 import org.nutz.lang.Mirror;
 import org.nutz.lang.Strings;
 
 /**
  * @author zozoh(zozohtnt@gmail.com)
  * @author wendal(wendal1985@gmail.com)
- * 
+ * @author 有心猴(belialofking@163.com)
  */
 @SuppressWarnings({"rawtypes"})
 public class JsonRenderImpl implements JsonRender {
@@ -41,85 +38,91 @@ public class JsonRenderImpl implements JsonRender {
 
     private Set<Object> memo = new HashSet<Object>();
 
-    public void render(Object obj) throws IOException {
-        if (null == obj) {
-            writer.write("null");
-        } else if (obj instanceof JsonRender) {
-            ((JsonRender) obj).render(null);
-        } else if (obj instanceof Class) {
-            string2Json(((Class<?>) obj).getName());
-        } else if (obj instanceof Mirror) {
-            string2Json(((Mirror<?>) obj).getType().getName());
-        } else {
-            Mirror mr = Mirror.me(obj.getClass());
-            // 枚举
-            if (mr.isEnum()) {
-                string2Json(((Enum) obj).name());
-            }
-            // 数字，布尔等
-            else if (mr.isNumber() || mr.isBoolean()) {
-                writer.append(obj.toString());
-            }
-            // 字符串
-            else if (mr.isStringLike() || mr.isChar()) {
-                string2Json(obj.toString());
-            }
-            // 日期时间
-            else if (mr.isDateTimeLike()) {
-                string2Json(format.getCastors().castToString(obj));
-            }
-            // 其他
-            else {
-                // Map
-                if (obj instanceof Map) {
-                    map2Json((Map) obj);
-                }
-                // 集合
-                else if (obj instanceof Collection) {
-                    coll2Json((Collection) obj);
-                }
-                // 数组
-                else if (obj.getClass().isArray()) {
-                    array2Json(obj);
-                }
-                // 普通 Java 对象
-                else {
-                    memo.add(obj);
-                    pojo2Json(obj);
-                    memo.remove(obj);
-                }
-            }
-        }
+    private boolean compact;
+
+    /**
+     * 缩进
+     */
+    private int indent;
+
+    public JsonFormat getFormat() {
+        return format;
     }
 
-    public JsonRenderImpl(Writer writer, JsonFormat format) {
+    @Override
+    public void setFormat(JsonFormat format) {
         this.format = format;
+        this.compact = format.isCompact();
+    }
+
+    public Writer getWriter() {
+        return writer;
+    }
+
+    @Override
+    public void setWriter(Writer writer) {
         this.writer = writer;
     }
 
-    private static boolean isCompact(JsonRenderImpl render) {
-        return render.format.isCompact();
+    @Override
+    public void render(Object obj) throws IOException {
+        if (null == obj) {
+            appendNull();
+            return;
+        }
+        Mirror mirror = Mirror.me(obj);
+        for (JsonTypeHandler handler : Json.getTypeHandlers()) {
+            if (handler.supportToJson(mirror, obj, format)) {
+                if (handler.shallCheckMemo()) {
+                    if (memo.contains(obj)) {
+                        writer.write("null");
+                        return;
+                    }
+                    memo.add(obj);
+                    handler.toJson(mirror, obj, this, format);
+                    memo.remove(obj);
+                }
+                else
+                    handler.toJson(mirror, obj, this, format);
+                return;
+            }
+        }
+        // 理论上不会到这来,防御用
+        this.string2Json(String.valueOf(obj));
+    }
+
+    public JsonRenderImpl() {}
+
+    public JsonRenderImpl(Writer writer, JsonFormat format) {
+        this.writer = writer;
+        setFormat(format);
     }
 
     private static final Pattern p = Pattern.compile("^[a-z_A-Z$]+[a-zA-Z_0-9$]*$");
 
-    private void appendName(String name) throws IOException {
+    @Override
+    public void appendName(String name) throws IOException {
         if (format.isQuoteName() || !p.matcher(name).find())
             string2Json(name);
         else
             writer.append(name);
     }
 
-    private void appendPairBegin() throws IOException {
-        if (!isCompact(this))
-            writer.append(NL).append(Strings.dup(format.getIndentBy(), format.getIndent()));
+    @Override
+    public void appendPairBegin() throws IOException {
+        if (!compact) {
+            writer.append(NL);
+            doIntent();
+        }
     }
 
-    private void appendPairSep() throws IOException {
-        writer.append(!isCompact(this) ? " :" : ":");
+    @Override
+    public void appendPairSep() throws IOException {
+        writer.append(!compact ? ": " : ":");
     }
 
-    protected void appendPair(boolean needPairEnd, String name, Object value) throws IOException {
+    @Override
+    public void appendPair(boolean needPairEnd, String name, Object value) throws IOException {
         appendPairBegin();
         appendName(name);
         appendPairSep();
@@ -129,145 +132,75 @@ public class JsonRenderImpl implements JsonRender {
         }
     }
 
-    private boolean isIgnore(String name, Object value) {
+    @Override
+    public boolean isIgnore(String name, Object value) {
         if (null == value && format.isIgnoreNull())
             return true;
         return format.ignore(name);
     }
 
-    private void appendPairEnd() throws IOException {
+    @Override
+    public void appendPairEnd() throws IOException {
         writer.append(',');
     }
 
-    private void appendBraceBegin() throws IOException {
+    @Override
+    public void appendBraceBegin() throws IOException {
         writer.append('{');
     }
 
-    private void appendBraceEnd() throws IOException {
-        if (!isCompact(this))
-            writer.append(NL).append(Strings.dup(format.getIndentBy(), format.getIndent()));
+    @Override
+    public void appendBraceEnd() throws IOException {
+        if (!compact) {
+            writer.append(NL);
+            doIntent();
+        }
         writer.append('}');
     }
 
-    static class Pair {
-
-        public Pair(String name, Object value) {
-            this.name = name;
-            this.value = value;
-        }
-
-        String name;
-        Object value;
-    }
-
     @SuppressWarnings({"unchecked"})
-    private void map2Json(Map map) throws IOException {
+    public void map2Json(Map map) throws IOException {
         if (null == map)
             return;
         appendBraceBegin();
         increaseFormatIndent();
-        ArrayList<Pair> list = new ArrayList<Pair>(map.size());
+        ArrayList<JsonPair> list = new ArrayList<JsonPair>(map.size());
         Set<Entry<?, ?>> entrySet = map.entrySet();
         for (Entry entry : entrySet) {
             String name = null == entry.getKey() ? "null" : entry.getKey().toString();
             Object value = entry.getValue();
             if (!this.isIgnore(name, value))
-                list.add(new Pair(name, value));
+                list.add(new JsonPair(name, value));
         }
         writeItem(list);
     }
 
-    private void pojo2Json(Object obj) throws IOException {
-        if (null == obj)
-            return;
-        Class<? extends Object> type = obj.getClass();
-        ToJson tj = type.getAnnotation(ToJson.class);
-        String myMethodName = Strings.sNull(null == tj ? null : tj.value(), "toJson");
-        try {
-            /*
-             * toJson()
-             */
-            try {
-                Method myMethod = type.getMethod(myMethodName);
-                if (!myMethod.isAccessible())
-                    myMethod.setAccessible(true);
-                Object re = myMethod.invoke(obj);
-                writer.append(String.valueOf(re));
-                return;
-            }
-            /*
-             * toJson(JsonFormat fmt)
-             */
-            catch (NoSuchMethodException e1) {
-                try {
-                    Method myMethod = type.getMethod(myMethodName, JsonFormat.class);
-                    if (!myMethod.isAccessible())
-                        myMethod.setAccessible(true);
-                    Object re = myMethod.invoke(obj, format);
-                    writer.append(String.valueOf(re));
-                    return;
-                }
-                catch (NoSuchMethodException e) {}
-            }
-        }
-        catch (Exception e) {
-            throw Lang.wrapThrow(e);
-        }
-        /*
-         * Default
-         */
-        JsonEntity jen = Json.getEntity(Mirror.me(type));
-        List<JsonEntityField> fields = jen.getFields();
-        appendBraceBegin();
-        increaseFormatIndent();
-        ArrayList<Pair> list = new ArrayList<Pair>(fields.size());
-        for (JsonEntityField jef : fields) {
-            String name = jef.getName();
-            try {
-                Object value = jef.getValue(obj);
-                // 判断是否应该被忽略
-                if (!this.isIgnore(name, value)) {
-                    // 以前曾经输出过 ...
-                    if (null != value) {
-                        // zozoh: 循环引用的默认行为，应该为 null，以便和其他语言交换数据
-                        Mirror mirror = Mirror.me(value);
-                        if (mirror.isPojo()) {
-                            if (memo.contains(value))
-                                value = null;
-                        }
-                    }
-                    // 加入输出列表 ...
-                    list.add(new Pair(name, value));
-                }
-            }
-            catch (FailToGetValueException e) {}
-        }
-        writeItem(list);
-    }
-
-    private void writeItem(List<Pair> list) throws IOException {
-        Iterator<Pair> it = list.iterator();
+    @Override
+    public void writeItem(List<JsonPair> list) throws IOException {
+        Iterator<JsonPair> it = list.iterator();
         while (it.hasNext()) {
-            Pair p = it.next();
+            JsonPair p = it.next();
             appendPair(it.hasNext(), p.name, p.value);
         }
         decreaseFormatIndent();
         appendBraceEnd();
     }
 
-    private void decreaseFormatIndent() {
-        if (!isCompact(this))
-            format.decreaseIndent();
+    @Override
+    public void decreaseFormatIndent() {
+        if (!compact)
+            indent--;
     }
 
-    private void increaseFormatIndent() {
-        if (!isCompact(this))
-            format.increaseIndent();
+    @Override
+    public void increaseFormatIndent() {
+        if (!compact)
+            indent++;
     }
 
-    private void string2Json(String s) throws IOException {
+    public void string2Json(String s) throws IOException {
         if (null == s)
-            writer.append("null");
+            appendNull();
         else {
             char[] cs = s.toCharArray();
             writer.append(format.getSeparator());
@@ -280,51 +213,95 @@ public class JsonRenderImpl implements JsonRender {
                     writer.append("\\n");
                     break;
                 case '\t':
+                case 0x0B: // \v
                     writer.append("\\t");
                     break;
                 case '\r':
                     writer.append("\\r");
                     break;
+                case '\f':
+                    writer.append("\\f");
+                    break;
+                case '\b':
+                    writer.append("\\b");
+                    break;
                 case '\\':
                     writer.append("\\\\");
                     break;
                 default:
-                    if (c >= 256 && format.isAutoUnicode())
-                        writer.append("\\u").append(Integer.toHexString(c).toUpperCase());
-                    else
-                        writer.append(c);
+                    if (c >= 256 && format.isAutoUnicode()) {
+                        writer.append("\\u");
+                        String u = Strings.fillHex(c, 4);
+                        if (format.isUnicodeLower())
+                            writer.write(u.toLowerCase());
+                        else
+                            writer.write(u.toUpperCase());
+                    } else {
+                        if (c < ' ' || (c >= '\u0080' && c < '\u00a0') || (c >= '\u2000' && c < '\u2100')) {
+                            writer.write("\\u");
+                            String hhhh = Integer.toHexString(c);
+                            writer.write("0000", 0, 4 - hhhh.length());
+                            writer.write(hhhh);
+                        } else {
+                            writer.append(c);
+                        }
+                    }
                 }
             }
             writer.append(format.getSeparator());
         }
     }
 
-    private void array2Json(Object obj) throws IOException {
-        writer.append('[');
-        int len = Array.getLength(obj) - 1;
-        if (len > -1) {
-            int i;
-            for (i = 0; i < len; i++) {
-                render(Array.get(obj, i));
-                appendPairEnd();
-                writer.append(' ');
+    @Override
+    public String value2string(JsonEntityField jef, Object value) {
+        Format df = jef.getDataFormat();
+        if (df == null) {
+            Mirror mirror = Mirror.me(value);
+            if (value instanceof Date) {
+                df = format.getDateFormat();
+            } else if (mirror.isNumber()) {
+                df = format.getNumberFormat();
             }
-            render(Array.get(obj, i));
         }
-        writer.append(']');
+        if (df != null) {
+            if (df instanceof DateFormat)
+                return doDateFormat((Date) value, (DateFormat) df);
+            return df.format(value);
+        }
+        return value.toString();
     }
 
-    private void coll2Json(Collection iterable) throws IOException {
-        writer.append('[');
-        for (Iterator<?> it = iterable.iterator(); it.hasNext();) {
-            render(it.next());
-            if (it.hasNext()) {
-                appendPairEnd();
-                writer.append(' ');
-            } else
-                break;
+    protected void doIntent() throws IOException {
+        for (int i = 0; i < indent; i++)
+            writer.write(format.getIndentBy());
+    }
+
+    protected void appendNull() throws IOException {
+        if (format.isNullAsEmtry())
+            writer.write("\"\"");
+        else
+            writer.write("null");
+    }
+
+    protected String doDateFormat(Date date, DateFormat df) {
+        if (df == null)
+            df = format.getDateFormat();
+        if (df != null) {
+            if (format.getTimeZone() != null)
+                df.setTimeZone(format.getTimeZone());
+            return df.format(date);
         }
-        writer.append(']');
+        return null;
+    }
+
+    @Override
+    public void writeRaw(String raw) throws IOException {
+        writer.write(raw);
+    }
+
+    @Override
+    public boolean memoContains(Object obj) {
+        return memo.contains(obj);
     }
 
 }

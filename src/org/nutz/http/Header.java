@@ -1,28 +1,43 @@
 package org.nutz.http;
 
+import java.nio.charset.Charset;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import org.nutz.json.Json;
 import org.nutz.json.JsonFormat;
+import org.nutz.lang.util.NutMap;
 
+@SuppressWarnings("unchecked")
 public class Header {
 
-    private Header() {
-        items = new HashMap<String, String>();
-    }
+    protected NutMap items;
 
-    private Map<String, String> items;
+    protected Header() {
+        items = new NutMap();
+    }
 
     public Collection<String> keys() {
         return items.keySet();
     }
 
+    @SuppressWarnings("rawtypes")
     public String get(String key) {
-        return items.get(key);
+        Object value = items.get(key);
+        if (value == null)
+            return null;
+        if (value instanceof List) {
+            if (((List)value).isEmpty())
+                return null;
+            return (String) ((List)value).get(0);
+        }
+        return (String) value;
     }
 
     public Header set(String key, String value) {
@@ -40,14 +55,24 @@ public class Header {
         items.clear();
         return this;
     }
-    
-    public Set<Entry<String, String>> getAll(){
-        return items.entrySet();
+
+    public Set<Entry<String, String>> getAll() {
+        Map<String, String> tmp = new HashMap<String, String>();
+        for (String key : items.keySet()) {
+            String value = get(key);
+            if (value != null)
+                tmp.put(key, value);
+        }
+        return tmp.entrySet();
     }
 
     public Header addAll(Map<String, String> map) {
-        if (null != map)
-            items.putAll(map);
+        if (null != map) {
+        	for (Map.Entry<String, String> en : map.entrySet()) {
+        		if (en.getValue() != null) // 如果值不是String,就立马报错咯
+        			this.items.put(en.getKey(), en.getValue());
+			}
+        }
         return this;
     }
 
@@ -59,23 +84,74 @@ public class Header {
     public static Header create(Map<String, String> properties) {
         return new Header().addAll(properties);
     }
+    
+    public static Header create(NutMap reHeader) {
+        Header header = new Header();
+        header.items.putAll(reHeader);
+        return header;
+    }
 
-    @SuppressWarnings("unchecked")
     public static Header create(String properties) {
         return create((Map<String, String>) Json.fromJson(properties));
     }
 
     public static Header create() {
         Header header = new Header();
-        header.set("User-Agent", "Nutz.Robot");
-        header.set("Accept-Encoding", "gzip,deflate");
-        header.set("Accept", "text/xml,application/xml,application/xhtml+xml,text/html;"
-                                + "q=0.9,text/plain;q=0.8,image/png,*/*;q=0.5");
-        header.set("Accept-Language", "en-US,en,zh,zh-CN");
-        header.set("Accept-Charset", "ISO-8859-1,*,utf-8");
-        header.set("Connection", "keep-alive");
-        header.set("Cache-Control", "max-age=0");
+        header.addAll(Http.DEFAULT_HEADERS);
         return header;
     }
 
+    public String get(String key, String defaultValue) {
+        String value = get(key);
+        if (value == null)
+            return defaultValue;
+        return value;
+    }
+
+    public int getInt(String key, int defaultValue) {
+        String value = get(key);
+        if (value == null)
+            return defaultValue;
+        return Integer.parseInt(value);
+    }
+    
+    public Header asJsonContentType() {
+        return this.asJsonContentType(null);
+    }
+    
+    public Header asFormContentType() {
+        return this.asFormContentType(null);
+    }
+    
+    public Header asJsonContentType(String enc) {
+        if (enc == null)
+            enc = Charset.defaultCharset().name();
+        set("Content-Type", "application/json; charset="+enc.toUpperCase());
+        return this;
+    }
+    
+    public Header asFormContentType(String enc) {
+        if (enc == null)
+            enc = Charset.defaultCharset().name();
+        set("Content-Type", "application/x-www-form-urlencoded; charset="+enc.toUpperCase());
+        return this;
+    }
+    
+    public void addv(String name, String value) {
+        if (value == null) {
+            items.remove(name);
+        }
+        else {
+            items.addv(name, value);
+        }
+    }
+    
+    public List<String> getValues(String name) {
+        Object value = items.get(name);
+        if (value == null)
+            return Collections.EMPTY_LIST;
+        if (value instanceof String)
+            return Arrays.asList((String)value);
+        return (List<String>)value;
+    }
 }

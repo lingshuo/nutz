@@ -1,11 +1,17 @@
 package org.nutz.filepool;
 
 import java.io.File;
-import java.io.FilenameFilter;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import org.nutz.lang.Files;
 import org.nutz.lang.Lang;
+import org.nutz.lang.util.Disks;
+import org.nutz.lang.util.Regex;
 import org.nutz.log.Log;
 import org.nutz.log.Logs;
 
@@ -30,35 +36,15 @@ public class NutFilePool implements FilePool {
                                     homePath,
                                     this.getClass().getName());
 
-        try {
-            home = new File(home.getCanonicalPath());
-        }
-        catch (IOException e1) {
-            throw Lang.wrapThrow(e1);
-        }
+        home = new File(Disks.normalize(homePath));
 
         if (log.isDebugEnabled()) {
             log.debugf("file-pool.home: '%s'", home.getAbsolutePath());
         }
 
-        File last = home;
-        String[] subs = null;
-        while (last.isDirectory()) {
-            subs = last.list(new FilenameFilter() {
-                public boolean accept(File dir, String name) {
-                    return name.matches("^([\\d|A-F]{2})([.][a-zA-Z]{1,})?$");
-                }
-            });
-            if (null != subs && subs.length > 0) {
-                last = new File(last.getAbsolutePath() + "/" + subs[subs.length - 1]);
-                if (last.isFile()) {
-                    cursor = Pools.getFileId(home, last);
-                    break;
-                }
-            } else {
-                break;
-            }
-        }
+        cursor = foundMax(home, home, 0);
+        if (cursor < 0)
+            cursor = 0;
 
         if (log.isInfoEnabled())
             log.infof("file-pool.cursor: %s", cursor);
@@ -75,11 +61,9 @@ public class NutFilePool implements FilePool {
     }
 
     public File createFile(String suffix) {
-        if (size > 0 && cursor >= size)
+        if (size > 0 && cursor >= size-1)
             cursor = -1;
         long id = ++cursor;
-        if (size > 0 && id >= size)
-            Lang.makeThrow("Id (%d) is out of range (%d)", id, size);
         File re = Pools.getFileById(home, id, suffix);
         if (!re.exists())
             try {
@@ -172,5 +156,59 @@ public class NutFilePool implements FilePool {
             Files.makeDir(f);
         return f;
     }
-
+    
+    /**
+     * 公共FilePool的缓存池
+     */
+    protected static Map<String, FilePool> pools = new HashMap<String, FilePool>();
+    /**
+     * 获取指定路径下的FilePool,如果没有就新建一个
+     * @param path 临时文件夹
+     * @param limit 最大文件数量
+     * @return 已有或新建的FilePool同步实例
+     */
+    public static FilePool getOrCreatePool(String path, long limit) {
+        FilePool pool = pools.get(path);
+        if (pool == null) {
+            pool = new NutFilePool(path, limit);
+            pool = new SynchronizedFilePool(pool);
+            pools.put(path, pool);
+        }
+        return pool;
+    }
+    
+    public static void clearPools() {
+        pools.clear();
+    }
+    
+    protected static long foundMax(File home, File current, int level) {
+        // 最后一层了
+        if (level == 8) {
+            if (current.isDirectory())
+                return -1;
+            //System.out.println("found File!! "+current);
+            return Pools.getFileId(home, current);
+        }
+        if (!current.isDirectory())
+            return -1;
+        int next_level = level+1;
+        List<String> names = new ArrayList<String>();
+        
+        for (File f : current.listFiles()) {
+            if (Regex.match("^([\\d|A-F]{2})([.][a-zA-Z]{1,})?$", f.getName())) {
+                names.add(f.getName());
+            }
+        }
+        Collections.sort(names);
+        Collections.reverse(names);
+        for (String name : names) {
+            File next = new File(current, name);
+            //System.out.println(next + ", level=" + next_level);
+            long max = foundMax(home, next, next_level);
+            if (max > -1) {
+                return max;
+            }
+        }
+        return -1;
+    }
 }

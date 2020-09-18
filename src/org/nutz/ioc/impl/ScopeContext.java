@@ -1,8 +1,15 @@
 package org.nutz.ioc.impl;
 
-import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
+
+import javax.sql.DataSource;
 
 import org.nutz.ioc.IocContext;
 import org.nutz.ioc.ObjectProxy;
@@ -24,7 +31,7 @@ public class ScopeContext implements IocContext {
 
     public ScopeContext(String scope) {
         this.scope = scope;
-        objs = new HashMap<String, ObjectProxy>();
+        objs = new LinkedHashMap<String, ObjectProxy>();
     }
 
     private void checkBuffer() {
@@ -56,7 +63,8 @@ public class ScopeContext implements IocContext {
                 if (!objs.containsKey(name)) {
                     if (log.isDebugEnabled())
                         log.debugf("Save object '%s' to [%s] ", name, scope);
-                    return null != objs.put(name, obj);
+                    objs.put(name, obj);
+                    return true;
                 }
             }
         }
@@ -72,7 +80,7 @@ public class ScopeContext implements IocContext {
             checkBuffer();
 
             synchronized (this) {
-                if (!objs.containsKey(name)) {
+                if (objs.containsKey(name)) {
                     if (log.isDebugEnabled())
                         log.debugf("Remove object '%s' from [%s] ", name, scope);
                     return null != objs.remove(name);
@@ -84,10 +92,26 @@ public class ScopeContext implements IocContext {
 
     public void clear() {
         checkBuffer();
-        for (Entry<String, ObjectProxy> en : objs.entrySet()) {
+        List<Entry<String, ObjectProxy>> list = new ArrayList<Entry<String, ObjectProxy>>(objs.entrySet());
+        Collections.reverse(list);
+        List<Entry<String, ObjectProxy>> tmp = new ArrayList<Entry<String, ObjectProxy>>();
+        for (Entry<String, ObjectProxy> en : list) {
+            try {
+                ObjectProxy op = en.getValue();
+                Object obj = op.getObj();
+                if (obj != null && obj instanceof DataSource) {
+                    tmp.add(en);
+                    continue;
+                }
+            } catch (Throwable e) {
+            }
             if (log.isDebugEnabled())
                 log.debugf("Depose object '%s' ...", en.getKey());
-
+            en.getValue().depose();
+        }
+        for (Entry<String, ObjectProxy> en : tmp) {
+            if (log.isDebugEnabled())
+                log.debugf("Depose object '%s' ...", en.getKey());
             en.getValue().depose();
         }
         objs.clear();
@@ -103,4 +127,11 @@ public class ScopeContext implements IocContext {
         }
     }
 
+    public Set<String> names() {
+        if (objs == null)
+            return Collections.emptySet();
+        synchronized (this) {
+            return new HashSet<String>(objs.keySet());
+        }
+    }
 }

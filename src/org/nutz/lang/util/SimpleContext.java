@@ -24,6 +24,10 @@ public class SimpleContext extends AbstractContext {
         this.map = map;
     }
 
+    public int size() {
+        return map.size();
+    }
+
     public Context set(String name, Object value) {
         map.put(name, value);
         return this;
@@ -48,6 +52,10 @@ public class SimpleContext extends AbstractContext {
 
     public Object get(String name) {
         return map.get(name);
+    }
+    
+    public Object remove(String name) {
+        return map.remove(name);
     }
 
     public SimpleContext clone() {

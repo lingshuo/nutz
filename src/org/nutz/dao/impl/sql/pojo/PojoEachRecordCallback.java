@@ -3,6 +3,7 @@ package org.nutz.dao.impl.sql.pojo;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 
 import org.nutz.dao.entity.Record;
 import org.nutz.dao.pager.ResultSetLooping;
@@ -18,7 +19,7 @@ import org.nutz.lang.LoopException;
 public class PojoEachRecordCallback implements PojoCallback {
 
     @SuppressWarnings("unchecked")
-    public Object invoke(Connection conn, ResultSet rs, Pojo pojo) throws SQLException {
+    public Object invoke(Connection conn, ResultSet rs, Pojo pojo, Statement stmt) throws SQLException {
         // 得到回调
         final Each<Object> each = pojo.getContext().attr(Each.class);
         // 没有回调，什么都不用执行了
@@ -51,7 +52,7 @@ public class PojoEachRecordCallback implements PojoCallback {
         }
         catch (ExitLoop e) {}
         catch (LoopException e) {
-            throw new SQLException(e.getCause());
+            throw new SQLException(e.getCause().getMessage());
         }
 
         // 返回数量

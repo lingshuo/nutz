@@ -1,8 +1,13 @@
 package org.nutz.dao.impl.jdbc.sqlserver2005;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.nutz.conf.NutConf;
 import org.nutz.dao.DB;
 import org.nutz.dao.Dao;
 import org.nutz.dao.Sqls;
@@ -27,7 +32,7 @@ public class Sqlserver2005JdbcExpert extends AbstractJdbcExpert {
     // private static String COMMENT_TABLE =
     // "EXECUTE sp_updateextendedproperty N'Description', '$tableComment', N'user', N'dbo', N'table', N'$table', NULL, NULL";
 
-    private static String COMMENT_COLUMN = "EXECUTE sp_addextendedproperty N'Description', '$columnComment', N'user', N'dbo', N'table', N'$table', N'column', N'$column'";
+    private static String COMMENT_COLUMN = "EXECUTE sp_addextendedproperty N'MS_Description', '$columnComment', N'user', N'dbo', N'table', N'$table', N'column', N'$column'";
 
     public Sqlserver2005JdbcExpert(JdbcExpertConfigFile conf) {
         super(conf);
@@ -41,7 +46,9 @@ public class Sqlserver2005JdbcExpert extends AbstractJdbcExpert {
         StringBuilder sb = new StringBuilder("CREATE TABLE " + en.getTableName() + "(");
         // 创建字段
         for (MappingField mf : en.getMappingFields()) {
-            sb.append('\n').append(mf.getColumnName());
+            if (mf.isReadonly())
+                continue;
+            sb.append('\n').append(mf.getColumnNameInSql());
             sb.append(' ').append(evalFieldType(mf));
             // 非主键的 @Name，应该加入唯一性约束
             if (mf.isName() && en.getPkType() != PkType.NAME) {
@@ -56,7 +63,7 @@ public class Sqlserver2005JdbcExpert extends AbstractJdbcExpert {
                 if (mf.isAutoIncreasement())
                     sb.append(" IDENTITY");
                 if (mf.hasDefaultValue())
-                    sb.append(" DEFAULT '").append(getDefaultValue(mf)).append('\'');
+                    addDefaultValue(sb, mf);
             }
             sb.append(',');
         }
@@ -66,7 +73,7 @@ public class Sqlserver2005JdbcExpert extends AbstractJdbcExpert {
             sb.append('\n');
             sb.append("PRIMARY KEY (");
             for (MappingField pk : pks) {
-                sb.append(pk.getColumnName()).append(',');
+                sb.append(pk.getColumnNameInSql()).append(',');
             }
             sb.setCharAt(sb.length() - 1, ')');
             sb.append("\n ");
@@ -107,8 +114,7 @@ public class Sqlserver2005JdbcExpert extends AbstractJdbcExpert {
         }
     }
 
-    @Override
-    protected String evalFieldType(MappingField mf) {
+    public String evalFieldType(MappingField mf) {
         if (mf.getCustomDbType() != null)
             return mf.getCustomDbType();
         switch (mf.getColumnType()) {
@@ -135,14 +141,21 @@ public class Sqlserver2005JdbcExpert extends AbstractJdbcExpert {
                 return "decimal(" + mf.getWidth() + "," + mf.getPrecision() + ")";
             }
             // 用默认精度
-            if (mf.getTypeMirror().isDouble())
+            if (mf.getMirror().isDouble())
                 return "decimal(15,10)";
             return "float";
+        case VARCHAR:
+            if (NutConf.SQLSERVER_USE_NVARCHAR)
+                return "NVARCHAR(" + mf.getWidth() + ")";
+            return "VARCHAR(" + mf.getWidth() + ")";
         case BINARY:
-            return "BINARY";
+            return "varbinary(max)";
+        //case TEXT :
+        //    return "nvarchar(max)";
         default :
             break;
         }
+        
         return super.evalFieldType(mf);
     }
 
@@ -161,7 +174,7 @@ public class Sqlserver2005JdbcExpert extends AbstractJdbcExpert {
                 return;// 以免出错.
             pojo.insertFirst(Pojos.Items.wrapf(    "select * from(select row_number()over(order by __tc__)__rn__,* from(select top %d 0 __tc__, ",
                                                 pager.getOffset() + pager.getPageSize()));
-            pojo.append(Pojos.Items.wrapf(")t)tt where __rn__ > %d", pager.getOffset()));
+            pojo.append(Pojos.Items.wrapf(")t)tt where __rn__ > %d order by __rn__", pager.getOffset()));
         }
     }
     
@@ -191,5 +204,34 @@ public class Sqlserver2005JdbcExpert extends AbstractJdbcExpert {
         Pojo autoInfo = new SqlFieldMacro(idField, autoSql);
         autoInfo.setEntity(en);
         return autoInfo;
+    }
+    
+    public boolean addColumnNeedColumn() {
+        return false;
+    }
+    
+    public String wrapKeyword(String columnName, boolean force) {
+        if (force || keywords.contains(columnName.toUpperCase()))
+            return "[" + columnName + "]";
+        return null;
+    }
+    
+    public boolean isSupportGeneratedKeys() {
+        return false;
+    }
+    
+    public List<String> getIndexNames(Entity<?> en, Connection conn) throws SQLException {
+        List<String> names = new ArrayList<String>();
+        String showIndexs = "SELECT i.name FROM sys.indexes AS i "
+                + "INNER JOIN sys.tables AS o ON i.[object_id] = o.[object_id] "
+                + "WHERE  o.name = '"+en.getTableName()+"' AND i.is_primary_key = 0";
+        
+        PreparedStatement ppstat = conn.prepareStatement(showIndexs);
+        ResultSet rest = ppstat.executeQuery();
+        while (rest.next()) {
+            String index = rest.getString(1);
+            names.add(index);
+        }
+        return names;
     }
 }

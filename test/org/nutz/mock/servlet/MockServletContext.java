@@ -14,21 +14,28 @@ import java.util.Set;
 import java.util.Vector;
 
 import javax.servlet.Filter;
+import javax.servlet.FilterRegistration;
 import javax.servlet.RequestDispatcher;
 import javax.servlet.Servlet;
 import javax.servlet.ServletContext;
 import javax.servlet.ServletException;
+import javax.servlet.ServletRegistration;
+import javax.servlet.ServletRegistration.Dynamic;
+import javax.servlet.SessionCookieConfig;
+import javax.servlet.SessionTrackingMode;
+import javax.servlet.descriptor.JspConfigDescriptor;
 
 import org.nutz.lang.Lang;
 import org.nutz.log.Log;
 import org.nutz.log.Logs;
 
-public class MockServletContext extends MockServletObject implements ServletContext {
+public class MockServletContext extends MockServletObject implements
+        ServletContext {
 
     private static final Log log = Logs.get();
 
     public int getMajorVersion() {
-        throw Lang.noImplement();
+        return 2;
     }
 
     public String getMimeType(String arg0) {
@@ -36,7 +43,7 @@ public class MockServletContext extends MockServletObject implements ServletCont
     }
 
     public int getMinorVersion() {
-        throw Lang.noImplement();
+        return 5;
     }
 
     public RequestDispatcher getNamedDispatcher(String arg0) {
@@ -83,7 +90,7 @@ public class MockServletContext extends MockServletObject implements ServletCont
     }
 
     public String getServerInfo() {
-        throw Lang.noImplement();
+        return "NutServer TestCase 1.0";
     }
 
     public Servlet getServlet(String name) throws ServletException {
@@ -143,7 +150,7 @@ public class MockServletContext extends MockServletObject implements ServletCont
     }
 
     public String getContextPath() {
-        throw Lang.noImplement();
+        return "";
     }
 
     // =====================================================3.0
@@ -160,11 +167,13 @@ public class MockServletContext extends MockServletObject implements ServletCont
         throw Lang.noImplement();
     }
 
-    public <T extends Servlet> T createServlet(Class<T> clazz) throws ServletException {
+    public <T extends Servlet> T createServlet(Class<T> clazz)
+            throws ServletException {
         throw Lang.noImplement();
     }
 
-    public <T extends Filter> T createFilter(Class<T> clazz) throws ServletException {
+    public <T extends Filter> T createFilter(Class<T> clazz)
+            throws ServletException {
         throw Lang.noImplement();
     }
 
@@ -180,7 +189,8 @@ public class MockServletContext extends MockServletObject implements ServletCont
         throw Lang.noImplement();
     }
 
-    public <T extends EventListener> T createListener(Class<T> clazz) throws ServletException {
+    public <T extends EventListener> T createListener(Class<T> clazz)
+            throws ServletException {
         throw Lang.noImplement();
     }
 
@@ -190,6 +200,100 @@ public class MockServletContext extends MockServletObject implements ServletCont
 
     public void declareRoles(String... roleNames) {
         throw Lang.noImplement();
+    }
+
+    @Override
+    public Dynamic addServlet(String servletName, String className) {
+        
+        return null;
+    }
+
+    @Override
+    public Dynamic addServlet(String servletName, Servlet servlet) {
+        
+        return null;
+    }
+
+    @Override
+    public Dynamic addServlet(String servletName, Class<? extends Servlet> servletClass) {
+        
+        return null;
+    }
+
+    @Override
+    public ServletRegistration getServletRegistration(String servletName) {
+        
+        return null;
+    }
+
+    @Override
+    public Map<String, ? extends ServletRegistration> getServletRegistrations() {
+        
+        return null;
+    }
+
+    @Override
+    public javax.servlet.FilterRegistration.Dynamic addFilter(String filterName, String className) {
+        
+        return null;
+    }
+
+    @Override
+    public javax.servlet.FilterRegistration.Dynamic addFilter(String filterName, Filter filter) {
+        
+        return null;
+    }
+
+    @Override
+    public javax.servlet.FilterRegistration.Dynamic addFilter(String filterName,
+                                                              Class<? extends Filter> filterClass) {
+        
+        return null;
+    }
+
+    @Override
+    public FilterRegistration getFilterRegistration(String filterName) {
+        
+        return null;
+    }
+
+    @Override
+    public Map<String, ? extends FilterRegistration> getFilterRegistrations() {
+        
+        return null;
+    }
+
+    @Override
+    public SessionCookieConfig getSessionCookieConfig() {
+        
+        return null;
+    }
+
+    @Override
+    public void setSessionTrackingModes(Set<SessionTrackingMode> sessionTrackingModes) {}
+
+    @Override
+    public Set<SessionTrackingMode> getDefaultSessionTrackingModes() {
+        
+        return null;
+    }
+
+    @Override
+    public Set<SessionTrackingMode> getEffectiveSessionTrackingModes() {
+        
+        return null;
+    }
+
+    @Override
+    public JspConfigDescriptor getJspConfigDescriptor() {
+        
+        return null;
+    }
+
+    @Override
+    public String getVirtualServerName() {
+        
+        return null;
     }
 
 }

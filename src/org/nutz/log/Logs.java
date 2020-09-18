@@ -1,5 +1,9 @@
 package org.nutz.log;
 
+import org.nutz.lang.Lang;
+import org.nutz.log.impl.Log4jLogAdapter;
+import org.nutz.log.impl.NopLog;
+import org.nutz.log.impl.SystemLogAdapter;
 import org.nutz.plugin.SimplePluginManager;
 
 /**
@@ -14,11 +18,6 @@ public final class Logs {
 
     static {
         init();
-        try {
-            get().info("Nutz is licensed under the Apache License, Version 2.0 .\nReport bugs : https://github.com/nutzam/nutz/issues");
-        } catch (Throwable e) {
-            // just pass!!
-        }
     }
 
     /**
@@ -27,8 +26,6 @@ public final class Logs {
      * @param clazz
      *            your class
      * @return Log
-     * @throws NullPointerException
-     *             when clazz is null
      */
     public static Log getLog(Class<?> clazz) {
         return getLog(clazz.getName());
@@ -40,8 +37,6 @@ public final class Logs {
      * @param className
      *            the name of Log
      * @return Log
-     * @throws NullPointerException
-     *             when className is null, maybe it will case NPE
      */
     public static Log getLog(String className) {
         return adapter.getLogger(className);
@@ -51,7 +46,15 @@ public final class Logs {
      * 返回以调用者的类命名的Log,是获取Log对象最简单的方法!
      */
     public static Log get() {
-        return adapter.getLogger(Thread.currentThread().getStackTrace()[2].getClassName());
+    	StackTraceElement[] sts = Thread.currentThread().getStackTrace();
+    	if (Lang.isAndroid) {
+    		for (int i = 0; i < sts.length; i++) {
+				if (sts[i].getClassName().equals(Logs.class.getName())) {
+					return adapter.getLogger(sts[i+1].getClassName());
+				}
+			}
+    	}
+    	return adapter.getLogger(sts[2].getClassName());
     }
 
     /**
@@ -65,14 +68,35 @@ public final class Logs {
     public static void init() {
         try {
             String packageName = Logs.class.getPackage().getName() + ".impl.";
-            adapter = new SimplePluginManager<LogAdapter>(    packageName + "Log4jLogAdapter",
-                                                            packageName + "SystemLogAdapter").get();
+            adapter = new SimplePluginManager<LogAdapter>(
+                    packageName + "CustomLogAdapter",
+                    packageName + "Slf4jLogAdapter",
+                    packageName + "Log4jLogAdapter",
+                    packageName + "SystemLogAdapter").get();
         }
         catch (Throwable e) {
-            //这是不应该发生的,SystemLogAdapter应该永远返回true
-            //唯一的可能性是所请求的org.nutz.log.impl.SystemLogAdapter根本不存在
-            //例如改了package
-            e.printStackTrace();
+            try {
+                Log4jLogAdapter tmp = new Log4jLogAdapter();
+                if (tmp.canWork())
+                    adapter = tmp;
+                else
+                    adapter = new SystemLogAdapter();
+            } catch (Throwable _e) {
+                adapter = new SystemLogAdapter();
+            }
         }
     }
+    
+    /**
+     * 开放自定义设置LogAdapter,注意,不能设置为null!! 如果你打算完全禁用Nutz的log,可以设置为NOP_ADAPTER
+     * @param adapter 你所偏好的LogAdapter
+     */
+    public static void setAdapter(LogAdapter adapter) {
+		Logs.adapter = adapter;
+	}
+    
+    /**
+     * 什么都不做的适配器,无任何输出,某些人就想完全禁用掉NutzLog,就可以用上它了
+     */
+    public static LogAdapter NOP_ADAPTER = NopLog.NOP;
 }

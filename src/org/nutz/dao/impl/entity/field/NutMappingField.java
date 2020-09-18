@@ -1,8 +1,5 @@
 package org.nutz.dao.impl.entity.field;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
-
 import org.nutz.dao.entity.Entity;
 import org.nutz.dao.entity.MappingField;
 import org.nutz.dao.entity.Record;
@@ -10,232 +7,348 @@ import org.nutz.dao.entity.annotation.ColType;
 import org.nutz.dao.impl.entity.EntityObjectContext;
 import org.nutz.dao.jdbc.ValueAdaptor;
 import org.nutz.lang.segment.Segment;
+import org.nutz.log.Log;
+import org.nutz.log.Logs;
+
+import java.sql.ResultSet;
+import java.sql.SQLException;
 
 public class NutMappingField extends AbstractEntityField implements MappingField {
 
-	private String columnName;
+    private String columnName;
 
-	private ColType columnType;
+    private String columnNameInSql;
 
-	private Segment defaultValue;
+    private ColType columnType;
 
-	private String columnComment;
+    private Segment defaultValue;
 
-	private int width;
+    private String columnComment;
 
-	private int precision;
+    private int width;
 
-	private boolean isCompositePk;
+    private int precision;
 
-	private boolean isId;
+    private boolean isCompositePk;
 
-	private boolean isName;
+    private boolean isId;
 
-	private boolean readonly;
+    private boolean isName;
 
-	private boolean notNull;
+    private boolean isVersion;
 
-	private boolean unsigned;
+    private boolean readonly;
 
-	private boolean autoIncreasement;
+    private boolean notNull;
 
-	private boolean casesensitive;
+    private boolean unsigned;
 
-	private boolean hasColumnComment;
+    private boolean autoIncreasement;
 
-	private String customDbType;
+    private boolean casesensitive;
 
-	private ValueAdaptor adaptor;
+    private boolean hasColumnComment;
 
-	private boolean insert = true;
+    private String customDbType;
 
-	private boolean update = true;
+    private ValueAdaptor adaptor;
 
-	public NutMappingField(Entity<?> entity) {
-		super(entity);
-		casesensitive = true;
-	}
+    private boolean insert = true;
 
-	public ValueAdaptor getAdaptor() {
-		return adaptor;
-	}
+    private boolean update = true;
 
-	public void setAdaptor(ValueAdaptor adaptor) {
-		this.adaptor = adaptor;
-	}
+    private static final Log log = Logs.get();
 
-	public void injectValue(Object obj, Record rec) {
-		try {
-			Object val = rec.get(columnName);
-			this.setValue(obj, val);
-		}
-		catch (Exception e) {}
-	}
+    public NutMappingField() {
+        this(null);
+    }
 
-	public void injectValue(Object obj, ResultSet rs) {
-		try {
-			this.setValue(obj, adaptor.get(rs, columnName));
-		}
-		catch (SQLException e) {}
-	}
+    public NutMappingField(Entity<?> entity) {
+        super(entity);
+        casesensitive = true;
+    }
 
-	public String getColumnName() {
-		return columnName;
-	}
+    public ValueAdaptor getAdaptor() {
+        return adaptor;
+    }
 
-	public ColType getColumnType() {
-		return columnType;
-	}
+    public void setAdaptor(ValueAdaptor adaptor) {
+        this.adaptor = adaptor;
+    }
 
-	public String getDefaultValue(Object obj) {
-		if (null == defaultValue)
-			return null;
-		String re;
-		if (null == obj || defaultValue.keyCount() == 0)
-			re = defaultValue.toString();
-		else
-			re = defaultValue.render(new EntityObjectContext(getEntity(), obj)).toString();
-		return re;
-	}
+    public void injectValue(Object obj, Record rec, String prefix) {
+        try {
+            Object val = rec.get(prefix == null ? columnName : prefix + columnName);
+            this.setValue(obj, val);
+        }
+        catch (Exception e) {
+            if (log.isTraceEnabled()) {
+                log.tracef("columnName=" + columnName, e);
+            }
+        }
+    }
 
-	public int getWidth() {
-		return width;
-	}
+    public void injectValue(Object obj, ResultSet rs, String prefix) {
+        try {
+            this.setValue(obj, adaptor.get(rs, prefix == null ? columnName : prefix + columnName));
+        }
+        catch (SQLException e) {
+            if (log.isTraceEnabled()) {
+                log.tracef("columnName=" + columnName, e);
+            }
+        }
+    }
 
-	public int getPrecision() {
-		return precision;
-	}
+    public String getColumnName() {
+        return columnName;
+    }
 
-	public boolean isCompositePk() {
-		return isCompositePk;
-	}
+    public ColType getColumnType() {
+        return columnType;
+    }
 
-	public boolean isPk() {
-		return isId || (!isId && isName) || isCompositePk;
-	}
+    public String getDefaultValue(Object obj) {
+        if (null == defaultValue)
+            return null;
+        String re;
+        if (null == obj || defaultValue.keyCount() == 0)
+            re = defaultValue.toString();
+        else
+            re = defaultValue.render(new EntityObjectContext(getEntity(), obj)).toString();
+        return re;
+    }
 
-	public boolean isId() {
-		return isId;
-	}
+    public int getWidth() {
+        return width;
+    }
 
-	public boolean isName() {
-		return isName;
-	}
+    public int getPrecision() {
+        return precision;
+    }
 
-	public boolean isReadonly() {
-		return readonly;
-	}
+    public boolean isCompositePk() {
+        return isCompositePk;
+    }
 
-	public boolean hasDefaultValue() {
-		return null != defaultValue;
-	}
+    public boolean isPk() {
+        return isId || (!isId && isName) || isCompositePk;
+    }
 
-	public boolean isNotNull() {
-		return notNull;
-	}
+    public boolean isId() {
+        return isId;
+    }
 
-	public boolean isCasesensitive() {
-		return casesensitive;
-	}
+    public boolean isName() {
+        return isName;
+    }
 
-	public boolean isAutoIncreasement() {
-		return autoIncreasement;
-	}
+    public boolean isReadonly() {
+        return readonly;
+    }
 
-	public boolean isUnsigned() {
-		return unsigned;
-	}
+    public boolean hasDefaultValue() {
+        return null != defaultValue;
+    }
 
-	public void setColumnName(String columnName) {
-		this.columnName = columnName;
-	}
+    public boolean isNotNull() {
+        return notNull;
+    }
 
-	public void setColumnType(ColType columnType) {
-		this.columnType = columnType;
-	}
+    public boolean isCasesensitive() {
+        return casesensitive;
+    }
 
-	public void setColumnComment(String columnComment) {
-		this.columnComment = columnComment;
-	}
+    public boolean isAutoIncreasement() {
+        return autoIncreasement;
+    }
 
-	public void setHasColumnComment(boolean hasColumnComment) {
-		this.hasColumnComment = hasColumnComment;
-	}
+    public boolean isUnsigned() {
+        return unsigned;
+    }
 
-	public void setDefaultValue(Segment defaultValue) {
-		this.defaultValue = defaultValue;
-	}
+    public void setColumnName(String columnName) {
+        this.columnName = columnName;
+    }
 
-	public void setWidth(int width) {
-		this.width = width;
-	}
+    public void setColumnType(ColType columnType) {
+        this.columnType = columnType;
+    }
 
-	public void setPrecision(int precision) {
-		this.precision = precision;
-	}
+    public void setColumnComment(String columnComment) {
+        this.columnComment = columnComment;
+    }
 
-	public void setAsCompositePk() {
-		this.isCompositePk = true;
-	}
+    public void setHasColumnComment(boolean hasColumnComment) {
+        this.hasColumnComment = hasColumnComment;
+    }
 
-	public void setAsId() {
-		this.isId = true;
-	}
+    public void setDefaultValue(Segment defaultValue) {
+        this.defaultValue = defaultValue;
+    }
 
-	public void setAsName() {
-		this.isName = true;
-	}
+    public void setWidth(int width) {
+        this.width = width;
+    }
 
-	public void setAsReadonly() {
-		this.readonly = true;
-	}
+    public void setPrecision(int precision) {
+        this.precision = precision;
+    }
 
-	public void setAsNotNull() {
-		this.notNull = true;
-	}
+    public void setAsCompositePk() {
+        this.isCompositePk = true;
+    }
 
-	public void setAsUnsigned() {
-		this.unsigned = true;
-	}
+    public void setAsId() {
+        this.isId = true;
+    }
 
-	public void setCasesensitive(boolean casesensitive) {
-		this.casesensitive = casesensitive;
-	}
+    public void setAsName() {
+        this.isName = true;
+    }
 
-	public void setAsAutoIncreasement() {
-		this.autoIncreasement = true;
-	}
+    public void setAsReadonly() {
+        this.readonly = true;
+    }
 
-	public String getColumnComment() {
-		return columnComment;
-	}
+    public void setAsNotNull() {
+        this.notNull = true;
+    }
 
-	public boolean hasColumnComment() {
-		return hasColumnComment;
-	}
+    public void setAsUnsigned() {
+        this.unsigned = true;
+    }
 
-	public void setCustomDbType(String customDbType) {
-		this.customDbType = customDbType;
-	}
+    public void setCasesensitive(boolean casesensitive) {
+        this.casesensitive = casesensitive;
+    }
 
-	public String getCustomDbType() {
-		return customDbType;
-	}
+    public void setAsAutoIncreasement() {
+        this.autoIncreasement = true;
+    }
 
-	public boolean isInsert() {
-		return insert;
-	}
+    public void setAutoIncreasement(boolean autoIncreasement) {
+        this.autoIncreasement = autoIncreasement;
+    }
 
-	public boolean isUpdate() {
-		return update;
-	}
+    public String getColumnComment() {
+        return columnComment;
+    }
 
-	public void setInsert(boolean insert) {
-		this.insert = insert;
-	}
+    public boolean hasColumnComment() {
+        return hasColumnComment;
+    }
 
-	public void setUpdate(boolean update) {
-		this.update = update;
-	}
+    public void setCustomDbType(String customDbType) {
+        this.customDbType = customDbType;
+    }
+
+    public String getCustomDbType() {
+        return customDbType;
+    }
+
+    public boolean isInsert() {
+        return insert;
+    }
+
+    public boolean isUpdate() {
+        return update;
+    }
+
+    public void setInsert(boolean insert) {
+        this.insert = insert;
+    }
+
+    public void setUpdate(boolean update) {
+        this.update = update;
+    }
+
+    public String getColumnNameInSql() {
+        if (columnNameInSql != null)
+            return columnNameInSql;
+        return columnName;
+    }
+
+    public void setColumnNameInSql(String columnNameInSql) {
+        this.columnNameInSql = columnNameInSql;
+    }
+
+    public boolean isVersion() {
+        return isVersion;
+    }
+
+    public void setAsVersion() {
+        this.isVersion = true;
+    }
+
+    // 补充一下 Setter/Getter
+
+    public Segment getDefaultValue() {
+        return defaultValue;
+    }
+
+    public boolean isHasColumnComment() {
+        return hasColumnComment;
+    }
+
+    public void setCompositePk(boolean isCompositePk) {
+        this.isCompositePk = isCompositePk;
+    }
+
+    public void setId(boolean isId) {
+        this.isId = isId;
+    }
+
+    public void setName(boolean isName) {
+        this.isName = isName;
+    }
+
+    public void setVersion(boolean isVersion) {
+        this.isVersion = isVersion;
+    }
+
+    public void setReadonly(boolean readonly) {
+        this.readonly = readonly;
+    }
+
+    public void setNotNull(boolean notNull) {
+        this.notNull = notNull;
+    }
+
+    public void setUnsigned(boolean unsigned) {
+        this.unsigned = unsigned;
+    }
+
+    public NutMappingField clone() {
+        NutMappingField mf = new NutMappingField(entity);
+        mf.entity = this.entity;
+        mf.name = this.name;
+        mf.type = this.type;
+        mf.typeClass = this.typeClass;
+        mf.mirror = this.mirror;
+        mf.injecting = this.injecting;
+        mf.ejecting = this.ejecting;
+        mf.columnName = this.columnName;
+        mf.columnNameInSql = this.columnNameInSql;
+        mf.columnType = this.columnType;
+        mf.defaultValue = this.defaultValue;
+        mf.columnComment = this.columnComment;
+        mf.width = this.width;
+        mf.precision = this.precision;
+        mf.isCompositePk = this.isCompositePk;
+        mf.isId = this.isId;
+        mf.isName = this.isName;
+        mf.isVersion = this.isVersion;
+        mf.readonly = this.readonly;
+        mf.notNull = this.notNull;
+        mf.unsigned = this.unsigned;
+        mf.autoIncreasement = this.autoIncreasement;
+        mf.casesensitive = this.casesensitive;
+        mf.hasColumnComment = this.hasColumnComment;
+        mf.customDbType = this.customDbType;
+        mf.adaptor = this.adaptor;
+        mf.insert = this.insert;
+        mf.update = this.update;
+        return mf;
+    }
 
 }

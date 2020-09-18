@@ -26,7 +26,7 @@
     之后，他在鼓起勇气阅读的之前，通常也会倒吸一口凉气。
 
 	当然，人的智慧就是在这过程中得到了淬炼，你的意志力，你的智慧，都会得到不同程度的升华。
-	但是 Nutz 这个小框架开发的初中并不是希望锻炼你，折磨你，事实上，它希望尽一切可能，
+	但是 Nutz 这个小框架开发的初衷并不是希望锻炼你，折磨你，事实上，它希望尽一切可能，
     让你远离这种锻炼...
 
 	...为此，我们也提供一个复合加载器，你可以将你的耦合关系写在配置文件中，或者Annotation
@@ -38,17 +38,18 @@
 	复合加载器非常简单，似乎只花了 Wendal 同学不到 1 个小时的时间，因为它本身并不做任何
 	事情，它只是调用其他的加载器：
 	{{{<Java>
-	Ioc ioc = new NutIoc(new ComboIocLoader(
-	                 "*org.nutz.ioc.loader.json.JsonLoader",
-	                 "dao.js", 
-	                 "service.js", 
-	                 "*org.nutz.ioc.loader.annotation.AnnotationIocLoader", 
-	                 "com.myapp.module",
-	                 "com.myapp.service"
-			 )); 
+	ComboIocLoader loader = new ComboIocLoader("*js",
+                                                   "ioc/dao.js",
+                                                   "ioc/service.js",
+                                                   "*anno",
+                                                   "com.myapp.module",
+                                                   "com.myapp.service",
+                                                   "*tx",
+                                                   // @Async注解,异步执行.
+                                                   "*async");
 	}}}
-	如上面的例子，组合加载器，组合了两个 Ioc 加载器，一个是 JsonLoader，一个是
-	AnnotationIocLoader。 
+	如上面的例子，组合加载器，组合了3个 Ioc 加载器，一个是 JsonLoader，一个是
+	AnnotationIocLoader, 一个是AOP事务的TransIocLoader(1.b.52新增), 一个异步注解加载器。 
 	
 	ComboIocLoader 的构造函数是个字符串形变参数组，所有的参数，如果以星号 "{#00A;* *}" 开头，
 	则被认为是加载器的类型，后面的参数都作为这个加载器构造函数的参数，直到遇到下一个
@@ -84,10 +85,10 @@
 	下面给个例子：
 	{{{<Java>
 	@IocBy(type = ComboIocProvider.class,
-	       args = {"*org.nutz.ioc.loader.json.JsonLoader",
-	               "dao.js", 
-	               "service.js", 
-	               "*org.nutz.ioc.loader.annotation.AnnotationIocLoader", 
+	       args = {"*js",
+	               "ioc/dao.js", 
+	               "ioc/service.js", 
+	               "*anno", 
 	               "com.myapp.module",
 	               "com.myapp.service"
 			})
@@ -105,6 +106,37 @@
 	 * JsonLoader
 	 * AnnotationIocLoader
 	 * MapLoader
-	 * 其他任何你自己实现的 IocLoader
+	 * TransIocLoader
+	 * AsyncAopIocLoader
+	 * PropertiesIocLoader
+	 * 所有实现的 IocLoader接口的类
 
+----------------------------------------------------------------------------------------
+类名的简写
+	
+	{{{
+	js         --> org.nutz.ioc.loader.json.JsonLoader
+	json       --> org.nutz.ioc.loader.json.JsonLoader
+    xml        --> org.nutz.ioc.loader.xml.XmlIocLoader
+    annotation --> org.nutz.ioc.loader.annotation.AnnotationIocLoader
+    anno       --> org.nutz.ioc.loader.annotation.AnnotationIocLoader
+    tx         --> org.nutz.aop.interceptor.ioc.TransIocLoader  #无参数
+    trans      --> org.nutz.aop.interceptor.ioc.TransIocLoader  #无参数
+    async	   --> org.nutz.aop.interceptor.async.AsyncAopIocLoader #可以带一个线程池大小的参数
+    props	   --> org.nutz.ioc.loader.properties.PropertiesIocLoader # 通过properties文件定义ioc bean
+    properties --> org.nutz.ioc.loader.properties.PropertiesIocLoader
+	}}}
+	
+-----------------------------------------------------------------------------------------
+插件加载(基于Ioc或Aop的插件)
 
+    从1.r.57开始,符合以下命名规则的插件类名,都可以直接使用缩写.
+    
+    {{{
+    // 插件名称quartz, 那么对应以下类名
+    org.nutz.integration.quartz.QuartzIocLoader
+    org.nutz.integration.quartz.QuartzAopConfigure
+    org.nutz.plugin.quartz.QuartzIocLoader
+    org.nutz.plugin.quartz.QuartzAopConfigure
+    // 不保证先后顺序,所以不要同时出现2个.
+    }}}

@@ -54,6 +54,7 @@ public class XmlIocLoader implements IocLoader {
     protected static final String TAG_OBJ = "obj";
     protected static final String TAG_ARGS = "args";
     protected static final String TAG_FIELD = "field";
+    protected static final String TAG_FACTORY = "factory";
 
     /**
      * 仅用于标示内部obj的id,内部obj声明的id将被忽略 <br/>
@@ -124,6 +125,9 @@ public class XmlIocLoader implements IocLoader {
         String beanParent = beanElement.getAttribute("parent");
         if (!Strings.isBlank(beanParent))
             parentMap.put(beanId, beanParent);
+        String factory = beanElement.getAttribute("factory");
+        if (!Strings.isBlank(factory))
+        	iocObject.setFactory(factory);
 
         parseArgs(beanElement, iocObject);
         parseFields(beanElement, iocObject);
@@ -152,6 +156,8 @@ public class XmlIocLoader implements IocLoader {
         for (Element fieldElement : list) {
                 IocField iocField = new IocField();
                 iocField.setName(fieldElement.getAttribute("name"));
+                if ("true".equals(fieldElement.getAttribute("optional")))
+                	iocField.setOptional(true);
                 if (fieldElement.hasChildNodes()) {
                     NodeList nodeList = fieldElement.getChildNodes();
                     for (int j = 0; j < nodeList.getLength(); j++) {
@@ -184,6 +190,8 @@ public class XmlIocLoader implements IocLoader {
     protected static final String EVN_TAG = IocValue.TYPE_ENV;
     protected static final String JNDI_TAG = IocValue.TYPE_JNDI;
     protected static final String SYS_TAG = IocValue.TYPE_SYS;
+    protected static final String APP_TAG = IocValue.TYPE_APP;
+    protected static final String EL_TAG = IocValue.TYPE_EL;
 
     protected IocValue parseX(Element element) throws Throwable {
         IocValue iocValue = new IocValue();
@@ -197,6 +205,9 @@ public class XmlIocLoader implements IocLoader {
         } else if (JNDI_TAG.equalsIgnoreCase(type)) {
             iocValue.setType(JNDI_TAG);
             iocValue.setValue(element.getTextContent());
+        } else if (EL_TAG.equalsIgnoreCase(type)) {
+            iocValue.setType(EL_TAG);
+            iocValue.setValue(element.getTextContent());
         } else if (JAVA_TAG.equalsIgnoreCase(type)) {
             iocValue.setType(JAVA_TAG);
             iocValue.setValue(element.getTextContent());
@@ -205,6 +216,9 @@ public class XmlIocLoader implements IocLoader {
             iocValue.setValue(element.getTextContent());
         } else if (FILE_TAG.equalsIgnoreCase(type)) {
             iocValue.setType(FILE_TAG);
+            iocValue.setValue(element.getTextContent());
+        } else if (APP_TAG.equalsIgnoreCase(type)) {
+            iocValue.setType(APP_TAG);
             iocValue.setValue(element.getTextContent());
         } else if (OBJ_TAG.equalsIgnoreCase(type)) {
             iocValue.setType(REFER_TAG);

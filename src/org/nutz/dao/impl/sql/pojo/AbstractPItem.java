@@ -3,13 +3,17 @@ package org.nutz.dao.impl.sql.pojo;
 import org.nutz.dao.FieldMatcher;
 import org.nutz.dao.entity.Entity;
 import org.nutz.dao.entity.MappingField;
-import org.nutz.dao.sql.Pojo;
 import org.nutz.dao.sql.PItem;
+import org.nutz.dao.sql.Pojo;
 import org.nutz.dao.sql.SqlType;
 
 public abstract class AbstractPItem implements PItem {
 
-    protected Pojo pojo;
+    private static final long serialVersionUID = 1L;
+
+    protected transient Pojo pojo;
+    
+    protected boolean top = true;
 
     public Pojo getPojo() {
         return pojo;
@@ -43,9 +47,17 @@ public abstract class AbstractPItem implements PItem {
         if (null != en) {
             MappingField mf = en.getField(name);
             if (null != mf)
-                return mf.getColumnName();
+                return mf.getColumnNameInSql();
         }
         return name;
     }
 
+    public AbstractPItem setTop(boolean top) {
+        this.top = top;
+        return this;
+    }
+    
+    public boolean isTop() {
+        return top;
+    }
 }

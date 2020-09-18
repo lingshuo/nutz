@@ -4,12 +4,19 @@ import org.nutz.dao.entity.Entity;
 
 public class SqlRange extends NoParamsSqlExpression implements SqlExpression {
 
-    private String sql;
+    private static final long serialVersionUID = 1L;
+
+    protected String sql;
+    
+    protected SqlRange(String name) {
+        super(name);
+    }
 
     public SqlRange(String name, String fmt, Object... args) {
         super(name);
         this.not = false;
-        this.sql = String.format(fmt, args);
+        if (fmt != null)
+            this.sql = String.format(fmt, args);
     }
 
     public void joinSql(Entity<?> en, StringBuilder sb) {

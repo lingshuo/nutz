@@ -6,9 +6,11 @@ import org.nutz.dao.jdbc.ValueAdaptor;
 
 public abstract class NumberRange extends AbstractSqlExpression {
 
+    private static final long serialVersionUID = 1L;
+
     protected long[] ids;
 
-    protected NumberRange(String name) {
+    public NumberRange(String name) {
         super(name);
     }
 
@@ -21,8 +23,7 @@ public abstract class NumberRange extends AbstractSqlExpression {
             for (int i = 0; i < ids.length; i++)
                 sb.append("?,");
             sb.setCharAt(sb.length() - 1, ')');
-        } else
-            ;//OK,无需添加.
+        } // OK,无需添加.
     }
 
     public int joinAdaptor(Entity<?> en, ValueAdaptor[] adaptors, int off) {

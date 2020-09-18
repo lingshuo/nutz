@@ -8,6 +8,7 @@ import java.util.regex.Pattern;
 
 import org.nutz.dao.Chain;
 import org.nutz.dao.Condition;
+import org.nutz.dao.DaoException;
 import org.nutz.dao.FieldFilter;
 import org.nutz.dao.FieldMatcher;
 import org.nutz.dao.entity.Entity;
@@ -37,9 +38,13 @@ import org.nutz.dao.sql.PojoCallback;
 import org.nutz.dao.sql.SqlType;
 import org.nutz.lang.Lang;
 import org.nutz.lang.Strings;
+import org.nutz.log.Log;
+import org.nutz.log.Logs;
 
 public abstract class Pojos {
 
+	public static final Log log = Logs.get();
+	
 	// ==========================================================
 	// 以下是创建 POJO 语句元素的帮助方法
 	public static class Items {
@@ -85,11 +90,17 @@ public abstract class Pojos {
 		}
 
 		public static PItem cndId(Entity<?> en, Number id) {
-			return cndColumn(en.getIdField(), id);
+		    MappingField mappingField = en.getIdField();
+		    if (mappingField == null)
+		        throw new DaoException("expect @Id but NOT found. " + en.getType().getName());
+			return cndColumn(mappingField, id);
 		}
 
 		public static PItem cndName(Entity<?> en, String name) {
-			return cndColumn(en.getNameField(), name);
+		    MappingField mappingField = en.getNameField();
+            if (mappingField == null)
+                throw new DaoException("expect @Name but NOT found. " + en.getType().getName());
+			return cndColumn(mappingField, name);
 		}
 
 		public static PItem cndColumn(MappingField mappingField, Object def) {
@@ -118,9 +129,15 @@ public abstract class Pojos {
 			switch (en.getPkType()) {
 			case ID:
 				Number id = null != obj ? ((Number) en.getIdField().getValue(obj)) : null;
+				if (id == null && (en.getNameField() != null)) {
+					String name = (String) en.getNameField().getValue(obj);
+					if (!Strings.isBlank(name)) {
+						return cndName(en, name);
+					}
+				}
 				return cndId(en, id);
 			case NAME:
-				String name = null != obj ? en.getNameField().getValue(obj).toString() : null;
+				String name = null != obj ? Strings.sNull(en.getNameField().getValue(obj), null) : null;
 				return cndName(en, name);
 			case COMPOSITE:
 				Object[] pks = null;
@@ -135,7 +152,7 @@ public abstract class Pojos {
 				if (Map.class.isAssignableFrom(en.getType())) {
 					return null; // Map形式的话,不一定需要主键嘛
 				}
-				throw Lang.makeThrow("Don't know how to make fetch key %s:'%s'", en.getType()
+				throw Lang.makeThrow("Don't know how to make fetch key %s:'%s', need any of @Id/@Name/@Pk", en.getType()
 																					.getName(), obj);
 			}
 		}
@@ -177,18 +194,25 @@ public abstract class Pojos {
 		return new NutPojo().setSqlType(SqlType.RUN).setAfter(callback);
 	}
 
-	public static List<MappingField> getFieldsForInsert(Entity<?> en, FieldMatcher fm) {
-		List<MappingField> re = new ArrayList<MappingField>(en.getMappingFields().size());
-		for (MappingField mf : en.getMappingFields()) {
-			if (!mf.isAutoIncreasement() && !mf.isReadonly() && mf.isInsert())
-				if (null == fm || fm.match(mf.getName()))
-					re.add(mf);
-		}
-		return re;
-	}
+    public static List<MappingField> getFieldsForInsert(Entity<?> en, FieldMatcher fm) {
+        List<MappingField> re = new ArrayList<MappingField>(en.getMappingFields().size());
+        for (MappingField mf : en.getMappingFields()) {
+            if (null == fm || fm.match(mf.getName())) {
+                if (!mf.isAutoIncreasement() && !mf.isReadonly() && mf.isInsert()) {
+                    re.add(mf);
+                } else if (fm != null && mf.isId() && !fm.isIgnoreId()) {
+                    re.add(mf);
+                }
+            }
+        }
+        if (re.isEmpty() && log.isDebugEnabled())
+            log.debug("none field for insert!");
+        return re;
+    }
 
 	public static List<MappingField> getFieldsForUpdate(Entity<?> en, FieldMatcher fm, Object refer) {
 		List<MappingField> re = new ArrayList<MappingField>(en.getMappingFields().size());
+        Object tmp = Lang.first(refer);
 		for (MappingField mf : en.getMappingFields()) {
 			if (mf.isPk()) {
 				if (en.getPkType() == PkType.ID && mf.isId())
@@ -200,11 +224,20 @@ public abstract class Pojos {
 			}
 			if (mf.isReadonly() || mf.isAutoIncreasement() || !mf.isUpdate())
 				continue;
-			else if (null != fm && null != refer && fm.isIgnoreNull() && null == mf.getValue(refer))
-				continue;
-			if (null == fm || fm.match(mf.getName()))
-				re.add(mf);
+			if (fm == null) {
+			    re.add(mf);
+			}
+			else if (tmp == null) {
+			    if (fm.match(mf.getName()))
+			        re.add(mf);
+			}
+			else {
+			    if (fm.match(mf, tmp))
+			        re.add(mf);
+			}
 		}
+		if (re.isEmpty() && log.isDebugEnabled())
+			log.debug("none field for update!");
 		return re;
 	}
 
@@ -212,14 +245,18 @@ public abstract class Pojos {
 														Pattern.CASE_INSENSITIVE);
 
 	public static String formatCondition(Entity<?> en, Condition cnd) {
-		if (null != cnd) {
-			String str = Strings.trim(cnd.toSql(en));
-			if (!ptn.matcher(str).find())
-				return "WHERE " + str;
-			return str;
-		}
-		return "";
+		return formatCondition(en, cnd, true);
 	}
+	
+	public static String formatCondition(Entity<?> en, Condition cnd, boolean top) {
+        if (null != cnd) {
+            String str = Strings.trim(cnd.toSql(en));
+            if (top && !ptn.matcher(str).find())
+                return "WHERE " + str;
+            return str;
+        }
+        return "";
+    }
 
 	public static Pojo pojo(JdbcExpert expert, Entity<?> en, SqlType type) {
 		Pojo pojo = expert.createPojo(type);

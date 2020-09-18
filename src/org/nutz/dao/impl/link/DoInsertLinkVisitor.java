@@ -3,6 +3,7 @@ package org.nutz.dao.impl.link;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 
 import org.nutz.dao.entity.Entity;
 import org.nutz.dao.entity.LinkField;
@@ -19,12 +20,12 @@ public class DoInsertLinkVisitor extends AbstractLinkVisitor {
 
     public void visit(final Object obj, final LinkField lnk) {
         final Object value = lnk.getValue(obj);
-        if (Lang.length(value) == 0)
+        if (Lang.eleSize(value) == 0)
             return;
 
         // 从宿主对象更新关联对象
         opt.add(Pojos.createRun(new PojoCallback() {
-            public Object invoke(Connection conn, ResultSet rs, Pojo pojo) throws SQLException {
+            public Object invoke(Connection conn, ResultSet rs, Pojo pojo, Statement stmt) throws SQLException {
                 lnk.updateLinkedField(obj, value);
                 return pojo.getOperatingObject();
             }
@@ -34,11 +35,13 @@ public class DoInsertLinkVisitor extends AbstractLinkVisitor {
         final Entity<?> en = lnk.getLinkedEntity();
         Lang.each(value, new Each<Object>() {
             public void invoke(int i, Object ele, int length) throws ExitLoop, LoopException {
+            	if (ele == null)
+            		throw new NullPointerException("null ele in linked field!!");
                 // 执行插入
                 opt.addInsert(en, ele);
                 // 更新字段
                 opt.add(Pojos.createRun(new PojoCallback() {
-                    public Object invoke(Connection conn, ResultSet rs, Pojo pojo)
+                    public Object invoke(Connection conn, ResultSet rs, Pojo pojo, Statement stmt)
                             throws SQLException {
                         lnk.saveLinkedField(obj, pojo.getOperatingObject());
                         return pojo.getOperatingObject();

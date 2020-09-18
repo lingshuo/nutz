@@ -2,10 +2,12 @@ package org.nutz.castor;
 
 import java.lang.reflect.Array;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 
+import org.nutz.lang.Lang;
 import org.nutz.lang.Mirror;
 
 /**
@@ -20,8 +22,28 @@ import org.nutz.lang.Mirror;
 public abstract class Castor<FROM, TO> {
 
     protected Castor() {
-        fromClass = (Class<?>) Mirror.getTypeParams(getClass())[0];
-        toClass = (Class<?>) Mirror.getTypeParams(getClass())[1];
+        Class<?> myType = getClass();
+        Class<?> mySuper = myType.getSuperclass();
+
+        Type[] myParams = Mirror.getTypeParams(myType);
+        Type[] superParams = Mirror.getTypeParams(mySuper);
+
+        if (null != superParams && superParams.length == 2) {
+            Class<?>[] args = new Class<?>[2];
+            int n = 0;
+            for (int i = 0; i < superParams.length; i++) {
+                if (superParams[i] instanceof Class<?>)
+                    args[i] = (Class<?>) superParams[i];
+                else
+                    args[i] = (Class<?>) myParams[n++];
+            }
+            fromClass = args[0];
+            toClass = args[1];
+        } else {
+            fromClass = (Class<?>) myParams[0];
+            toClass = (Class<?>) myParams[1];
+        }
+
     }
 
     protected Class<?> fromClass;
@@ -55,38 +77,30 @@ public abstract class Castor<FROM, TO> {
                 }
             }
             if (null == coll)
-                throw new FailToCastObjectException(String.format(    "Castors don't know how to implement '%s'",
-                                                                    toType.getName()),
-                                                    e);
+                throw new FailToCastObjectException(String.format("Castors don't know how to implement '%s'",
+                                                                  toType.getName()),
+                                                    Lang.unwrapThrow(e));
         }
         return coll;
     }
-    
+
     public int hashCode() {
-        return fetchHash(fromClass.getName() ,toClass.getName());
+        return toString().hashCode();
     }
-    
+
     public boolean equals(Object obj) {
-        if(!(obj instanceof Castor)){
+        if (!(obj instanceof Castor)) {
             return false;
         }
         Castor<?, ?> castor = (Castor<?, ?>) obj;
         return toString().equals(castor.toString());
     }
-    /**
-     * 取得hash值
-     */
-    public static int fetchHash(Class<?> from, Class<?> to){
-        return fetchHash(from.getName(), to.getName());
-    }
-    /**
-     * 取得Hash值
-     */
-    public static int fetchHash(String from, String to){
-        return (from + "2" + to).hashCode();
-    }
-    
+
     public String toString() {
+        return fromClass.getName() + "2" + toClass.getName();
+    }
+
+    public static final String key(Class<?> fromClass, Class<?> toClass) {
         return fromClass.getName() + "2" + toClass.getName();
     }
 }

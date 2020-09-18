@@ -3,6 +3,7 @@ package org.nutz.dao.impl.entity.macro;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 
 import org.nutz.dao.entity.MappingField;
 import org.nutz.dao.impl.jdbc.NutPojo;
@@ -13,7 +14,12 @@ import org.nutz.lang.util.Context;
 
 public class ElFieldMacro extends NutPojo {
 
-    private El bin;
+    /**
+	 * 
+	 */
+	private static final long serialVersionUID = 5393288165729677800L;
+
+	private El bin;
 
     private MappingField entityField;
 
@@ -28,8 +34,11 @@ public class ElFieldMacro extends NutPojo {
 
     private ElFieldMacro() {}
 
-    public void onAfter(Connection conn, ResultSet rs) throws SQLException {
-        Context context = entityField.getEntity().wrapAsContext(getOperatingObject());
+    public void onAfter(Connection conn, ResultSet rs, Statement stmt) throws SQLException {
+        Context context = entityField.getEntity()
+                                     .wrapAsContext(getOperatingObject());
+        context.set("field", entityField.getColumnName());
+        context.set("view", entityField.getEntity());
         Object value = bin.eval(context);
         entityField.setValue(getOperatingObject(), value);
     }
@@ -42,4 +51,8 @@ public class ElFieldMacro extends NutPojo {
         return re;
     }
 
+    @Override
+    public String forPrint() {
+        return "// NOT SQL // ElFieldMacro=" + this.bin;
+    }
 }
